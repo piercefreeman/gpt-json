@@ -1,6 +1,6 @@
 from re import DOTALL, finditer
 
-from gpt_json.models import ExpectedGPTResponseType
+from gpt_json.models import ResponseType
 from gpt_json.truncation import is_truncated
 
 
@@ -12,9 +12,9 @@ def find_json_response(full_response, extract_type):
 
     """
     # Deal with fully included responses as well as truncated responses that only have one
-    if extract_type == ExpectedGPTResponseType.LIST:
+    if extract_type == ResponseType.LIST:
         extracted_responses = list(finditer(r"(\[[^\]]*$|\[.*\])", full_response, flags=DOTALL))
-    elif extract_type == ExpectedGPTResponseType.DICTIONARY:
+    elif extract_type == ResponseType.DICTIONARY:
         extracted_responses = list(finditer(r"({[^}]*$|{.*})", full_response, flags=DOTALL))
     else:
         raise ValueError("Unknown extract_type")

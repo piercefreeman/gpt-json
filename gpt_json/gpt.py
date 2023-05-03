@@ -7,6 +7,8 @@ import openai
 from openai.error import APIConnectionError, RateLimitError
 from openai.error import Timeout as OpenAITimeout
 from tiktoken import encoding_for_model
+from pydantic import BaseModel
+from typing import TypeVar, Generic, Type
 
 from gpt_json.models import GPTMessage, GPTModelVersion, ResponseType
 from gpt_json.parsers import find_json_response
@@ -20,12 +22,16 @@ def handle_backoff(details):
         "{kwargs}".format(**details)
     )
 
+SchemaType = TypeVar("SchemaType", bound=BaseModel)
 
-class GPTJSON:
+
+class GPTJSON(Generic[SchemaType]):
     """
     A wrapper over GPT that provides basic JSON parsing and response handling.
 
     """
+    schema_model: Type[SchemaType] = None
+
     def __init__(
         self,
         api_key: str,
@@ -35,6 +41,9 @@ class GPTJSON:
     ):
         self.model = model.value if isinstance(model, GPTModelVersion) else model
         self.auto_trim = auto_trim
+
+        if not self.schema_model:
+            raise ValueError("GPTJSON needs to be instantiated with a schema model, like GPTJSON[MySchema](...args).")
 
         if self.auto_trim:
             if "gpt-4" in self.model:
@@ -60,7 +69,14 @@ class GPTJSON:
         print("------- RAW RESPONSE ----------")
         print(response["choices"])
         print("------- END RAW RESPONSE ----------")
-        return self.extract_json(response, extract_type)
+        extracted_json = self.extract_json(response, extract_type)
+
+        # Cast to schema model
+        if extracted_json is None:
+            return None
+
+        # Allow pydantic to handle the validation
+        return self.schema_model(**extracted_json)
 
     def extract_json(self, completion_response, extract_type: ResponseType):
         """
@@ -193,3 +209,8 @@ class GPTJSON:
             print(f"Skipping trim ({original_token_count}) ({current_token_count})")
 
         return new_messages
+
+    def __class_getitem__(cls, item):
+        new_cls = super().__class_getitem__(item)
+        new_cls.schema_model = item
+        return new_cls
