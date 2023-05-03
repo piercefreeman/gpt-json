@@ -68,6 +68,20 @@ gpt_json_single = GPTJSON[SentimentSchema](API_KEY)
 gpt_json_single = GPTJSON[list[SentimentSchema]](API_KEY)
 ```
 
+If you want to get more specific about how you expect the model to populate a field, add hints about the value through the "description" field. This helps the model understand what you're looking for, and will help it generate better results.
+
+```python
+from pydantic import BaseModel, Field
+
+class SentimentSchema(BaseModel):
+    sentiment: int = Field(description="Either -1, 0, or 1.")
+```
+
+```
+sentiment=1
+Detected sentiment: 1
+```
+
 ## Other Libraries
 
 A non-exhaustive list of other libraries that address the same problem. None of them were fully compatible with my deployment (hence this library), but check them out:
