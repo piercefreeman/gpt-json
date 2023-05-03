@@ -82,8 +82,8 @@ sentiment=1
 Detected sentiment: 1
 ```
 
-## Other Libraries
+## Comparison to Other Libraries
 
 A non-exhaustive list of other libraries that address the same problem. None of them were fully compatible with my deployment (hence this library), but check them out:
 
-[jsonformer](https://github.com/1rgs/jsonformer) - Works with any Huggingface model. This library is tailored towards the GPT-X family.
+[jsonformer](https://github.com/1rgs/jsonformer) - Works with any Huggingface model, whereas `gpt-json` is specifically tailored towards the GPT-X family.
