@@ -1,6 +1,18 @@
 # gpt-json
 
-JSON is a beautiful format. It's human readable and machine readable, which makes it a great format for structured output of LLMs. This library includes a wrapper around GPT to encourage it to respond with a JSON schema. It attempts to be as non-invasive as possible by mirroring the `openai` library schema with additional typing support.
+JSON is a beautiful format. It's human readable and machine readable, which makes it a great format for structured output of LLMs. `gpt-json` is a wrapper around GPT that allows for declarative definition of expected output format.
+
+Specifically it:
+- Relies on pydantic schema definitions and type validations
+- Includes some lightweight manipulation of the output to remove superfluous context and fix broken json
+- Includes retry logic for the most common API failures
+- Adds typehinting support for both the API and the output
+
+## Getting Started
+
+```bash
+pip install gpt-json
+```
 
 ## Other Libraries
 

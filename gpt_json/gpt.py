@@ -1,14 +1,14 @@
 from dataclasses import replace
 from json import loads as json_loads
 from json.decoder import JSONDecodeError
+from typing import Generic, List, Type, TypeVar, get_origin
 
 import backoff
 import openai
 from openai.error import APIConnectionError, RateLimitError
 from openai.error import Timeout as OpenAITimeout
-from tiktoken import encoding_for_model
 from pydantic import BaseModel
-from typing import TypeVar, Generic, Type
+from tiktoken import encoding_for_model
 
 from gpt_json.models import GPTMessage, GPTModelVersion, ResponseType
 from gpt_json.parsers import find_json_response
@@ -38,12 +38,24 @@ class GPTJSON(Generic[SchemaType]):
         model: GPTModelVersion | str = GPTModelVersion.GPT_4,
         auto_trim: bool = False,
         auto_trim_response_overhead: int = 0,
+        # For messages that are relatively deterministic
+        temperature = 0.2,
+        timeout = 60,
     ):
         self.model = model.value if isinstance(model, GPTModelVersion) else model
         self.auto_trim = auto_trim
+        self.temperature = temperature
+        self.timeout = timeout
 
         if not self.schema_model:
             raise ValueError("GPTJSON needs to be instantiated with a schema model, like GPTJSON[MySchema](...args).")
+
+        if get_origin(self.schema_model) in {list, List}:
+            self.extract_type: ResponseType.LIST
+        elif issubclass(self.schema_model, BaseModel):
+            self.extract_type = ResponseType.DICTIONARY
+        else:
+            raise ValueError("GPTJSON needs to be instantiated with either a schema or a list.")
 
         if self.auto_trim:
             if "gpt-4" in self.model:
@@ -62,14 +74,13 @@ class GPTJSON(Generic[SchemaType]):
     async def run(
         self,
         messages: list[GPTMessage],
-        extract_type: ResponseType,
         max_tokens: int | None = None,
-    ):
+    ) -> SchemaType | None:
         response = await self.submit_request(messages, max_tokens=max_tokens)
         print("------- RAW RESPONSE ----------")
         print(response["choices"])
         print("------- END RAW RESPONSE ----------")
-        extracted_json = self.extract_json(response, extract_type)
+        extracted_json = self.extract_json(response, self.extract_type)
 
         # Cast to schema model
         if extracted_json is None:
@@ -139,9 +150,8 @@ class GPTJSON(Generic[SchemaType]):
                 self.message_to_dict(message)
                 for message in messages
             ],
-            # We want messages to be relatively deterministic
-            temperature=0.2,
-            timeout=60,
+            temperature=self.temperature,
+            timeout=self.timeout,
             **optional_parameters,
         )
 

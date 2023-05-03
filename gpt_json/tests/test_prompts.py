@@ -1,7 +1,10 @@
-import pytest
-from gpt_json.tests.shared import MySchema
-from gpt_json.prompts import generate_schema_prompt
 from re import sub
+
+import pytest
+
+from gpt_json.prompts import generate_schema_prompt
+from gpt_json.tests.shared import MySchema
+
 
 def strip_whitespace(input_string: str):
     return sub(r"\s+", "", input_string)

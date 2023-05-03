@@ -1,6 +1,7 @@
 from pydantic import BaseModel, Field
 
-class SubModel(BaseModel):
+
+class MySubSchema(BaseModel):
     name: str
 
 
@@ -8,5 +9,5 @@ class MySchema(BaseModel):
     text: str
     items: list[str]
     numerical: int | float
-    sub_element: SubModel
+    sub_element: MySubSchema
     reason: bool = Field(description="Explanation")

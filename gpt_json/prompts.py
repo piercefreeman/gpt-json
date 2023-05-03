@@ -1,6 +1,8 @@
-from pydantic import BaseModel
-from typing import get_origin, get_args, List
 from types import UnionType
+from typing import List, get_args, get_origin
+
+from pydantic import BaseModel
+
 
 def generate_schema_prompt(schema: BaseModel | list[BaseModel]) -> str:
     """
