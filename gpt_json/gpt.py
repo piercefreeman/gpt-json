@@ -1,7 +1,7 @@
 from dataclasses import replace
 from json import loads as json_loads
 from json.decoder import JSONDecodeError
-from typing import Generic, List, Type, TypeVar, get_origin
+from typing import Generic, List, Type, TypeVar, get_origin, get_args
 
 import backoff
 import openai
@@ -13,6 +13,7 @@ from tiktoken import encoding_for_model
 from gpt_json.models import GPTMessage, GPTModelVersion, ResponseType
 from gpt_json.parsers import find_json_response
 from gpt_json.truncation import fix_truncated_json
+from gpt_json.prompts import generate_schema_prompt
 
 
 def handle_backoff(details):
@@ -24,6 +25,7 @@ def handle_backoff(details):
 
 SchemaType = TypeVar("SchemaType", bound=BaseModel)
 
+SCHEMA_PROMPT_TEMPLATE_KEY = "json_schema"
 
 class GPTJSON(Generic[SchemaType]):
     """
@@ -51,7 +53,7 @@ class GPTJSON(Generic[SchemaType]):
             raise ValueError("GPTJSON needs to be instantiated with a schema model, like GPTJSON[MySchema](...args).")
 
         if get_origin(self.schema_model) in {list, List}:
-            self.extract_type: ResponseType.LIST
+            self.extract_type = ResponseType.LIST
         elif issubclass(self.schema_model, BaseModel):
             self.extract_type = ResponseType.DICTIONARY
         else:
@@ -64,6 +66,8 @@ class GPTJSON(Generic[SchemaType]):
                 self.max_tokens = 4096 - auto_trim_response_overhead
             else:
                 raise ValueError("Unknown model to infer max tokens, see https://platform.openai.com/docs/models/gpt-4 for more information on token length.")
+
+        self.schema_prompt = generate_schema_prompt(self.schema_model)
 
         # Sets this attribute globally. In the future could be set per request.
         if openai.api_key and openai.api_key != api_key:
@@ -87,7 +91,11 @@ class GPTJSON(Generic[SchemaType]):
             return None
 
         # Allow pydantic to handle the validation
-        return self.schema_model(**extracted_json)
+        if isinstance(extracted_json, list):
+            model = get_args(self.schema_model)[0]
+            return [model(**item) for item in extracted_json]
+        else:
+            return self.schema_model(**extracted_json)
 
     def extract_json(self, completion_response, extract_type: ResponseType):
         """
@@ -158,7 +166,11 @@ class GPTJSON(Generic[SchemaType]):
     def message_to_dict(self, message: GPTMessage):
         return {
             "role": message.role.value,
-            "content": message.content,
+            "content": message.content.format(
+                **{
+                    SCHEMA_PROMPT_TEMPLATE_KEY: self.schema_prompt,
+                }
+            ),
         }
 
     def trim_messages(self, messages: list[GPTMessage], n: int):

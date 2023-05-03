@@ -32,7 +32,66 @@ def test_cast_message_to_gpt_format(role_type: GPTMessageRole, expected: str):
 
 
 @pytest.mark.asyncio
-async def test_acreate():
+@pytest.mark.parametrize(
+    "schema_typehint,response_raw,parsed",
+    [
+        (
+            MySchema,
+            """
+            Your response is as follows:
+            {
+                "text": "Test",
+                "items": ["Item 1", "Item 2"],
+                "numerical": 123,
+                "sub_element": {
+                    "name": "Test"
+                },
+                "reason": true
+            }
+            Your response is above.
+            """,
+            MySchema(
+                text="Test",
+                items=["Item 1", "Item 2"],
+                numerical=123,
+                sub_element=MySubSchema(
+                    name="Test"
+                ),
+                reason=True,
+            )
+        ),
+        (
+            list[MySchema],
+            """
+            Your response is as follows:
+            [
+                {
+                    "text": "Test",
+                    "items": ["Item 1", "Item 2"],
+                    "numerical": 123,
+                    "sub_element": {
+                        "name": "Test"
+                    },
+                    "reason": true
+                }
+            ]
+            Your response is above.
+            """,
+            [
+                MySchema(
+                    text="Test",
+                    items=["Item 1", "Item 2"],
+                    numerical=123,
+                    sub_element=MySubSchema(
+                        name="Test"
+                    ),
+                    reason=True,
+                )                
+            ]
+        )
+    ]
+)
+async def test_acreate(schema_typehint, response_raw, parsed):
     model_version = GPTModelVersion.GPT_3_5
     messages = [
         GPTMessage(
@@ -41,7 +100,7 @@ async def test_acreate():
         )
     ]
 
-    model = GPTJSON[MySchema](
+    model = GPTJSON[schema_typehint](
         None,
         model=model_version,
         temperature=0.0,
@@ -54,21 +113,7 @@ async def test_acreate():
             {
                 "message": {
                     "role": "assistant",
-                    "content": (
-                        """
-                        Your response is as follows:
-                        {
-                            "text": "Test",
-                            "items": ["Item 1", "Item 2"],
-                            "numerical": 123,
-                            "sub_element": {
-                                "name": "Test"
-                            },
-                            "reason": true
-                        }
-                        Your response is above.
-                        """
-                    ),
+                    "content": response_raw,
                 },
                 "index": 0,
                 "finish_reason": "stop",
@@ -100,12 +145,4 @@ async def test_acreate():
             timeout=60,
         )
 
-    assert response == MySchema(
-        text="Test",
-        items=["Item 1", "Item 2"],
-        numerical=123,
-        sub_element=MySubSchema(
-            name="Test"
-        ),
-        reason=True,
-    )
+    assert response == parsed
