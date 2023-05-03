@@ -18,11 +18,12 @@ pip install gpt-json
 Here's how to use it to generate a schema for simple tasks:
 
 ```python
-from gpt_json import GPTJSON, GPTMessage, GPTMessageRole
-from pydantic import BaseModel
 import asyncio
 
-class SentimentSchema:
+from gpt_json import GPTJSON, GPTMessage, GPTMessageRole
+from pydantic import BaseModel
+
+class SentimentSchema(BaseModel):
     sentiment: str
 
 SYSTEM_PROMPT = """
@@ -43,19 +44,29 @@ async def runner():
             ),
             GPTMessage(
                 role=GPTMessageRole.USER,
-                content="Text: I love this product. It's the best thing ever!,
+                content="Text: I love this product. It's the best thing ever!",
             )
         ]
     )
     print(response)
+    print(f"Detected sentiment: {response.sentiment}")
 
 asyncio.run(runner())
 ```
 
 ```bash
+sentiment='positive'
+Detected sentiment: positive
 ```
 
-The `json_schema` is a special keyword that will be replaced with the schema definition at runtime.
+The `json_schema` is a special keyword that will be replaced with the schema definition at runtime. You should always include this in your payload to ensure the model knows how to format results. However, you can play around with _where_ to include this schema definition; in the system prompt, in the user prompt, at the beginning, or at the end.
+
+You can either typehint the model to return a BaseSchema back, or to provide a list of Multiple BaseSchema. Both of these work:
+
+```python
+gpt_json_single = GPTJSON[SentimentSchema](API_KEY)
+gpt_json_single = GPTJSON[list[SentimentSchema]](API_KEY)
+```
 
 ## Other Libraries
 

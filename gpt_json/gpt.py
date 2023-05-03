@@ -68,12 +68,7 @@ class GPTJSON(Generic[SchemaType]):
                 raise ValueError("Unknown model to infer max tokens, see https://platform.openai.com/docs/models/gpt-4 for more information on token length.")
 
         self.schema_prompt = generate_schema_prompt(self.schema_model)
-
-        # Sets this attribute globally. In the future could be set per request.
-        if openai.api_key and openai.api_key != api_key:
-            raise ValueError("API Key already set globally, cannot set again.")
-        elif not openai.api_key:
-            openai.api_key = api_key
+        self.api_key = api_key
 
     async def run(
         self,
@@ -141,6 +136,11 @@ class GPTJSON(Generic[SchemaType]):
         messages: list[GPTMessage],
         max_tokens: int | None,
     ):
+        messages = [
+            self.fill_message_template(message)
+            for message in messages
+        ]
+
         print("------- START MESSAGE ----------")
         print(messages)
         print("------- END MESSAGE ----------")
@@ -160,17 +160,24 @@ class GPTJSON(Generic[SchemaType]):
             ],
             temperature=self.temperature,
             timeout=self.timeout,
+            api_key=self.api_key,
             **optional_parameters,
+        )
+
+    def fill_message_template(self, message: GPTMessage):
+        return replace(
+            message,
+            content=message.content.format(
+                **{
+                    SCHEMA_PROMPT_TEMPLATE_KEY: self.schema_prompt,
+                }
+            ),
         )
 
     def message_to_dict(self, message: GPTMessage):
         return {
             "role": message.role.value,
-            "content": message.content.format(
-                **{
-                    SCHEMA_PROMPT_TEMPLATE_KEY: self.schema_prompt,
-                }
-            ),
+            "content": message.content
         }
 
     def trim_messages(self, messages: list[GPTMessage], n: int):
