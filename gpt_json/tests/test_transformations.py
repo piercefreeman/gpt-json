@@ -36,14 +36,16 @@ def test_is_truncated(input_string: str, expected: bool):
         ('[{"key1": "value1"}, {"key2": "value2 start\n\n', [{"key1": "value1"}, {"key2": "value2 start"}]),
         # observed examples
         ('[{"key1": [123]', [{"key1": [123]}]),
-        ('{"key1": [\n"abc",\n "def', {"key1": ["abc", "def"]})
+        ('{"key1": [\n"abc",\n "def', {"key1": ["abc", "def"]}),
     ]
 )
 def test_fix_truncated_json(broken_string, expected):
+    fixed_string, _ = fix_truncated_json(broken_string)
+
     print("BROKEN", broken_string)
     print("EXPECTED", expected)
-    print("ACTUAL", fix_truncated_json(broken_string))
-    fixed_string, _ = fix_truncated_json(broken_string)
+    print("ACTUAL", fixed_string)
+
     assert json_loads(fixed_string) == expected
 
 @pytest.mark.parametrize(

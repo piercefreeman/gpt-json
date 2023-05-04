@@ -19,6 +19,14 @@ def build_stack(json_str):
 
     return (stack, fixed_str, open_quotes)
 
+def is_truncated(json_str):
+    """
+    Check if the json string is truncated by checking if the number of opening
+    brackets is greater than the number of closing brackets.
+
+    """
+    stack, _, _ = build_stack(json_str)
+    return len(stack) > 0
 
 def fix_truncated_json(json_str):
     """
