@@ -171,7 +171,7 @@ async def test_acreate(schema_typehint, response_raw, parsed):
             ],
             [
                 GPTMessage(role=GPTMessageRole.SYSTEM, content="Hello"),
-                GPTMessage(role=GPTMessageRole.USER, content="World" * 8192-1),
+                GPTMessage(role=GPTMessageRole.USER, content="World" * (8192-1)),
             ],
         ),
     ],
