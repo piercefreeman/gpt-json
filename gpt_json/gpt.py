@@ -9,6 +9,7 @@ from openai.error import APIConnectionError, RateLimitError
 from openai.error import Timeout as OpenAITimeout
 from pydantic import BaseModel
 from tiktoken import encoding_for_model
+from typing import Any
 
 from gpt_json.models import GPTMessage, GPTModelVersion, ResponseType
 from gpt_json.parsers import find_json_response
@@ -65,7 +66,7 @@ class GPTJSON(Generic[SchemaType]):
         elif issubclass(self.schema_model, BaseModel):
             self.extract_type = ResponseType.DICTIONARY
         else:
-            raise ValueError("GPTJSON needs to be instantiated with either a schema or a list.")
+            raise ValueError("GPTJSON needs to be instantiated with either a pydantic.BaseModel schema or a list of those schemas.")
 
         if self.auto_trim:
             if "gpt-4" in self.model:
@@ -82,7 +83,13 @@ class GPTJSON(Generic[SchemaType]):
         self,
         messages: list[GPTMessage],
         max_tokens: int | None = None,
+        format_variables: dict[str, Any] | None = None,
     ) -> SchemaType | None:
+        messages = [
+            self.fill_message_template(message, format_variables or {})
+            for message in messages
+        ]
+
         response = await self.submit_request(messages, max_tokens=max_tokens)
         logger.debug("------- RAW RESPONSE ----------")
         logger.debug(response["choices"])
@@ -144,11 +151,6 @@ class GPTJSON(Generic[SchemaType]):
         messages: list[GPTMessage],
         max_tokens: int | None,
     ):
-        messages = [
-            self.fill_message_template(message)
-            for message in messages
-        ]
-
         logger.debug("------- START MESSAGE ----------")
         logger.debug(messages)
         logger.debug("------- END MESSAGE ----------")
@@ -172,14 +174,21 @@ class GPTJSON(Generic[SchemaType]):
             **optional_parameters,
         )
 
-    def fill_message_template(self, message: GPTMessage):
+    def fill_message_template(self, message: GPTMessage, format_variables: dict[str, Any]):
+        content = message.content.format(
+            **{
+                SCHEMA_PROMPT_TEMPLATE_KEY: self.schema_prompt,
+            }
+        )
+        print("CONTENT", content)
+
+        # We do this formatting in a separate pass so we can fill any template variables that might
+        # have been left in the pydantic field typehints
+        content = content.format(**format_variables)
+
         return replace(
             message,
-            content=message.content.format(
-                **{
-                    SCHEMA_PROMPT_TEMPLATE_KEY: self.schema_prompt,
-                }
-            ),
+            content=content,
         )
 
     def message_to_dict(self, message: GPTMessage):

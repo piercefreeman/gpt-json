@@ -15,30 +15,30 @@ def strip_whitespace(input_string: str):
         (
             MySchema,
             """
-            {
+            {{
                 "text": str,
                 "items": str[],
                 "numerical": int | float,
-                "sub_element": {
+                "sub_element": {{
                     "name": str
-                },
+                }},
                 "reason": bool // Explanation
-            }
+            }}
             """
         ),
         (
             list[MySchema],
             """
             [
-            {
+            {{
             "text": str,
             "items": str[],
             "numerical": int | float,
-            "sub_element": {
+            "sub_element": {{
                 "name": str
-            },
+            }},
             "reason": bool // Explanation
-            }, // Repeat for as many objects as are relevant
+            }}, // Repeat for as many objects as are relevant
             ]
             """
         )
