@@ -156,6 +156,17 @@ When calling `gpt_json.run()`, we return a tuple of values. The first object is 
 
 *Where you can help*: There are certainly more areas of common (and not-so-common failures). If you see these, please add a test case to the README. If you can write a handler to help solve the general case, please do so. Otherwise flag it as a `pytest.xfail` and we'll add it to the backlog.
 
+## Testing
+
+We use poetry for package management. To run the bundled tests, clone the package from github.
+
+```bash
+poetry install
+poetry run pytest .
+```
+
+Our focus is on making unit tests as robust as possible. The variability with GPT should be in its language model, not in its JSON behavior! This is still certainly a work in progress. If you see an edge case that isn't covered, please add it to the test suite.
+
 ## Comparison to Other Libraries
 
 A non-exhaustive list of other libraries that address the same problem. None of them were fully compatible with my deployment (hence this library), but check them out:
