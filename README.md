@@ -152,9 +152,21 @@ GPT (especially GPT-4) is relatively good at formatting responses at JSON, but i
 - *Response truncation*: Since GPT is not internally aware of its response length limit, JSON payloads will sometimes exhaust the available token space. This results in a broken JSON payload where much of the data is valid but the JSON object is not closed, which is not valid syntax. There are many cases where this behavior is actually okay for production applications - for instance, if you list 100 generated strings, it's sometimes okay for you to take the 70 that actually rendered. In this case, `gpt-json` will attempt to fix the truncated payload by recreating the JSON object and closing it.
 - *Boolean variables*: GPT will sometimes confuse valid JSON boolean values with the boolean tokens that are used in other languages. The most common is generating `True` instead of `true`. `gpt-json` will attempt to fix these values.
 
-When calling `gpt_json.run()`, we return a tuple of values. The first object is your generated Pydantic model. The second object is our correction storage object `FixTransforms`. This dataclass contains flags for each of the supported transformation cases that are sketched out above. This allows you to determine whether the response was explicitly parsed from the GPT JSON, or was passed through some middlelayers to get a correct output. From there you can accept or reject the response based on your own business logic.
+When calling `gpt_json.run()`, we return a tuple of values:
 
-*Where you can help*: There are certainly more areas of common (and not-so-common failures). If you see these, please add a test case to the README. If you can write a handler to help solve the general case, please do so. Otherwise flag it as a `pytest.xfail` and we'll add it to the backlog.
+```python
+response, transformations = await gpt_json.run(...)
+
+print(transformations)
+```
+
+```bash
+FixTransforms(fixed_truncation=True, fixed_bools=False)
+```
+
+The first object is your generated Pydantic model. The second object is our correction storage object `FixTransforms`. This dataclass contains flags for each of the supported transformation cases that are sketched out above. This allows you to determine whether the response was explicitly parsed from the GPT JSON, or was passed through some middlelayers to get a correct output. From there you can accept or reject the response based on your own business logic.
+
+*Where you can help*: There are certainly more areas of common (and not-so-common failures). If you see these, please add a test case to the unit tests. If you can write a handler to help solve the general case, please do so. Otherwise flag it as a `pytest.xfail` and we'll add it to the backlog.
 
 ## Testing
 
