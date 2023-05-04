@@ -52,11 +52,26 @@ class GPTJSON(Generic[SchemaType]):
         # For messages that are relatively deterministic
         temperature = 0.2,
         timeout = 60,
+        openai_max_retries=3,
+        **kwargs,
     ):
+        """
+        :param api_key: OpenAI API key
+        :param model: GPTModelVersion or string model name
+        :param auto_trim: If True, automatically trim messages to fit within the model's token limit
+        :param auto_trim_response_overhead: If auto_trim is True, will leave at least `auto_trim_response_overhead` space
+            for the output payload. For GPT, initial prompt + response <= allowed tokens.
+        :param temperature: Temperature (or variation) of response payload; 0 is the most deterministic, 1 is the most random
+        :param timeout: Timeout in seconds for each OpenAI API calls
+        :param kwargs: Additional arguments to pass to OpenAI's `openai.Completion.create` method
+
+        """
         self.model = model.value if isinstance(model, GPTModelVersion) else model
         self.auto_trim = auto_trim
         self.temperature = temperature
         self.timeout = timeout
+        self.openai_max_retries = openai_max_retries
+        self.openai_arguments = kwargs
 
         if not self.schema_model:
             raise ValueError("GPTJSON needs to be instantiated with a schema model, like GPTJSON[MySchema](...args).")
@@ -90,7 +105,17 @@ class GPTJSON(Generic[SchemaType]):
             for message in messages
         ]
 
-        response = await self.submit_request(messages, max_tokens=max_tokens)
+        # Most requests succeed on the first try but we wrap it locally here in case
+        # there is some temporarily instability with the API. If there are longer periods
+        # of instability, there should be system-wide retries in a daemon.
+        backoff_request_submission = backoff.on_exception(
+            backoff.expo,
+            (RateLimitError, OpenAITimeout, APIConnectionError),
+            max_tries=self.openai_max_retries,
+            on_backoff=handle_backoff
+        )(self.submit_request)
+
+        response = await backoff_request_submission(messages, max_tokens=max_tokens)
         logger.debug("------- RAW RESPONSE ----------")
         logger.debug(response["choices"])
         logger.debug("------- END RAW RESPONSE ----------")
@@ -137,15 +162,6 @@ class GPTJSON(Generic[SchemaType]):
             logger.error("JSON decode error, likely malformed json input", e)
             return None
 
-    # Most requests succeed on the first try but we wrap it locally here in case
-    # there is some temporarily instability with the API. If there are longer periods
-    # of instability, there should be system-wide retries in a daemon.
-    @backoff.on_exception(
-        backoff.expo,
-        (RateLimitError, OpenAITimeout, APIConnectionError),
-        max_tries=6,
-        on_backoff=handle_backoff
-    )
     async def submit_request(
         self,
         messages: list[GPTMessage],
@@ -172,6 +188,7 @@ class GPTJSON(Generic[SchemaType]):
             timeout=self.timeout,
             api_key=self.api_key,
             **optional_parameters,
+            **self.openai_arguments,
         )
 
     def fill_message_template(self, message: GPTMessage, format_variables: dict[str, Any]):
