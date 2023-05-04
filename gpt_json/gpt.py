@@ -217,6 +217,7 @@ class GPTJSON(Generic[SchemaType]):
                 if remaining_tokens > 0:
                     cropped_message = enc.decode(tokens[:remaining_tokens])
                     filtered_messages.append(cropped_message)
+                current_token_count += remaining_tokens
                 break
 
         # Recreate the messages with our new text
