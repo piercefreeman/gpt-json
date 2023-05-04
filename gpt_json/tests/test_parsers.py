@@ -11,6 +11,7 @@ from gpt_json.parsers import find_json_response
         ('This message is truncated: [{"key1": [123', '[{"key1": [123', ResponseType.LIST),
         ('This message is truncated: [{"key1": "abc"', '[{"key1": "abc"', ResponseType.LIST),
         ('This message is truncated: {"key": "value", "list": [1, 2, 3', '{"key": "value", "list": [1, 2, 3', ResponseType.DICTIONARY),
+        ('This message is truncated: {"text": "Test", "numerical": 123, "reason": true, "sub_element": { "name": "Test" }, "items": ["Item 1", "Item 2', '{"text": "Test", "numerical": 123, "reason": true, "sub_element": { "name": "Test" }, "items": ["Item 1", "Item 2', ResponseType.DICTIONARY),
     ]
 )
 def test_find_json_response(input_string, expected, extract_type):

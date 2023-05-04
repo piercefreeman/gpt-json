@@ -1,13 +1,15 @@
 # gpt-json
 
-JSON is a beautiful format. It's both human readable and machine readable, which makes it a great format for structured output of LLMs (after all - LLMs are somewhere in the middle). `gpt-json` is a wrapper around GPT that allows for declarative definition of expected output format when you're trying to parse results into a downstream pipeline.
+`gpt-json` is a wrapper around GPT that allows for declarative definition of expected output format. Set up a schema, write a prompt, and get results back as beautiful typehinted objects.
 
-Specifically it:
-- Relies on Pydantic schema definitions and type validations
-- Allows for defining both dictionaries and lists
-- Includes some lightweight manipulation of the output to remove superfluous context and fix broken json
+Specifically this library:
+- Utilizes Pydantic schema definitions for type casting and validations
+- Adds typehinting for both the API and the output schema
+- Allows GPT to respond with both single-objects and lists of objects
+- Includes some lightweight transformations of the output to remove superfluous context and fix broken json
 - Includes retry logic for the most common API failures
-- Adds typehinting support for both the API and the output schema
+- Formats the JSON schema as a flexible prompt that can be added into any message
+- Supports tempating of prompts to allow for dynamic content
 
 ## Getting Started
 
@@ -36,7 +38,7 @@ Respond with the following JSON schema:
 
 async def runner():
     gpt_json = GPTJSON[SentimentSchema](API_KEY)
-    response = await gpt_json.run(
+    response, _ = await gpt_json.run(
         messages=[
             GPTMessage(
                 role=GPTMessageRole.SYSTEM,
@@ -82,6 +84,56 @@ sentiment=1
 Detected sentiment: 1
 ```
 
+## Prompt Variables
+
+In addition to the `json_schema` template keyword, you can also add arbitrary variables into your messages. This allows you to more easily insert user generated content or dynamically generate prompts based on the results of previous messages.
+
+```python
+class QuoteSchema(BaseModel):
+    quotes: list[str]
+
+SYSTEM_PROMPT = """
+Generate fictitious quotes that are {sentiment}.
+
+{json_schema}
+"""
+
+gpt_json = GPTJSON[QuoteSchema](API_KEY)
+response, _ = await gpt_json.run(
+    messages=[
+        GPTMessage(
+            role=GPTMessageRole.SYSTEM,
+            content=SYSTEM_PROMPT,
+        ),
+    ],
+    format_variables={"sentiment": "happy"},
+)
+```
+
+When calling the `.run()` function you can pass it the values that should be filled in this template. This also extends to field descriptions as well, so you can specify custom behavior on a per-field basis.
+
+```python
+class QuoteSchema(BaseModel):
+    quotes: list[str] = Field(description="Max quantity {max_items}.")
+
+SYSTEM_PROMPT = """
+Generate fictitious quotes that are {sentiment}.
+
+{json_schema}
+"""
+
+gpt_json = GPTJSON[QuoteSchema](API_KEY)
+response, _ = await gpt_json.run(
+    messages=[
+        GPTMessage(
+            role=GPTMessageRole.SYSTEM,
+            content=SYSTEM_PROMPT,
+        ),
+    ],
+    format_variables={"sentiment": "happy", "max_items": 5},
+)
+```
+
 ## Other Configurations
 
 The `GPTJSON` class supports other configuration parameters at initialization.
@@ -91,6 +143,29 @@ The `GPTJSON` class supports other configuration parameters at initialization.
 | model                       | GPTModelVersion \| str | (default: GPTModelVersion.GPT_4) - For convenience we provide the currently supported GPT model versions in the `GPTModelVersion` enum. You can also pass a string value if you want to use another more specific architecture.                                                                                                                                                       |
 | auto_trim                   | bool                   | (default: False) - If your input prompt is too long, perhaps because of dynamic injected content, will automatically truncate the text to create enough room for the model's response. |
 | auto_trim_response_overhead | int                    | (default: 0) - If you're using auto_trim, configures the max amount of tokens to allow in the model's response.                                                                        |
+| **kwargs | Any | Any other parameters you want to pass to the underlying `GPT` class, will just be a passthrough. |
+
+## Transformations
+
+GPT (especially GPT-4) is relatively good at formatting responses at JSON, but it's not perfect. Some of the more common issues are:
+
+- *Response truncation*: Since GPT is not internally aware of its response length limit, JSON payloads will sometimes exhaust the available token space. This results in a broken JSON payload where much of the data is valid but the JSON object is not closed, which is not valid syntax. There are many cases where this behavior is actually okay for production applications - for instance, if you list 100 generated strings, it's sometimes okay for you to take the 70 that actually rendered. In this case, `gpt-json` will attempt to fix the truncated payload by recreating the JSON object and closing it.
+- *Boolean variables*: GPT will sometimes confuse valid JSON boolean values with the boolean tokens that are used in other languages. The most common is generating `True` instead of `true`. `gpt-json` will attempt to fix these values.
+
+When calling `gpt_json.run()`, we return a tuple of values. The first object is your generated Pydantic model. The second object is our correction storage object `FixTransforms`. This dataclass contains flags for each of the supported transformation cases that are sketched out above. This allows you to determine whether the response was explicitly parsed from the GPT JSON, or was passed through some middlelayers to get a correct output. From there you can accept or reject the response based on your own business logic.
+
+*Where you can help*: There are certainly more areas of common (and not-so-common failures). If you see these, please add a test case to the README. If you can write a handler to help solve the general case, please do so. Otherwise flag it as a `pytest.xfail` and we'll add it to the backlog.
+
+## Testing
+
+We use poetry for package management. To run the bundled tests, clone the package from github.
+
+```bash
+poetry install
+poetry run pytest .
+```
+
+Our focus is on making unit tests as robust as possible. The variability with GPT should be in its language model, not in its JSON behavior! This is still certainly a work in progress. If you see an edge case that isn't covered, please add it to the test suite.
 
 ## Comparison to Other Libraries
 

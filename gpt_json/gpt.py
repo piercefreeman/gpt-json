@@ -11,9 +11,9 @@ from pydantic import BaseModel
 from tiktoken import encoding_for_model
 from typing import Any
 
-from gpt_json.models import GPTMessage, GPTModelVersion, ResponseType
+from gpt_json.models import GPTMessage, GPTModelVersion, ResponseType, FixTransforms
 from gpt_json.parsers import find_json_response
-from gpt_json.truncation import fix_truncated_json
+from gpt_json.transformations import fix_truncated_json, fix_bools
 from gpt_json.prompts import generate_schema_prompt
 
 import logging
@@ -52,11 +52,27 @@ class GPTJSON(Generic[SchemaType]):
         # For messages that are relatively deterministic
         temperature = 0.2,
         timeout = 60,
+        openai_max_retries=3,
+        **kwargs,
     ):
+        """
+        :param api_key: OpenAI API key
+        :param model: GPTModelVersion or string model name
+        :param auto_trim: If True, automatically trim messages to fit within the model's token limit
+        :param auto_trim_response_overhead: If auto_trim is True, will leave at least `auto_trim_response_overhead` space
+            for the output payload. For GPT, initial prompt + response <= allowed tokens.
+        :param temperature: Temperature (or variation) of response payload; 0 is the most deterministic, 1 is the most random
+        :param timeout: Timeout in seconds for each OpenAI API calls
+        :param openai_max_retries: Amount of times to retry failed API calls, caused by often transient load or rate limit issues
+        :param kwargs: Additional arguments to pass to OpenAI's `openai.Completion.create` method
+
+        """
         self.model = model.value if isinstance(model, GPTModelVersion) else model
         self.auto_trim = auto_trim
         self.temperature = temperature
         self.timeout = timeout
+        self.openai_max_retries = openai_max_retries
+        self.openai_arguments = kwargs
 
         if not self.schema_model:
             raise ValueError("GPTJSON needs to be instantiated with a schema model, like GPTJSON[MySchema](...args).")
@@ -82,19 +98,40 @@ class GPTJSON(Generic[SchemaType]):
     async def run(
         self,
         messages: list[GPTMessage],
-        max_tokens: int | None = None,
+        max_response_tokens: int | None = None,
         format_variables: dict[str, Any] | None = None,
-    ) -> SchemaType | None:
+    ) -> tuple[SchemaType | None, FixTransforms]:
+        """
+        :param messages: List of GPTMessage objects to send to the API
+        :param max_response_tokens: Maximum number of tokens allowed in the response
+        :param format_variables: Variables to format into the message template. Uses standard
+            Python string formatting, like "Hello {name}".format(name="World")
+
+        :return: Tuple of (parsed response, fix transforms). The transformations here is a object that
+            contains the allowed modifications that we might do to cleanup a GPT payload. It allows client callers
+            to decide whether they want to allow the modifications or not.
+
+        """
         messages = [
             self.fill_message_template(message, format_variables or {})
             for message in messages
         ]
 
-        response = await self.submit_request(messages, max_tokens=max_tokens)
+        # Most requests succeed on the first try but we wrap it locally here in case
+        # there is some temporarily instability with the API. If there are longer periods
+        # of instability, there should be system-wide retries in a daemon.
+        backoff_request_submission = backoff.on_exception(
+            backoff.expo,
+            (RateLimitError, OpenAITimeout, APIConnectionError),
+            max_tries=self.openai_max_retries,
+            on_backoff=handle_backoff
+        )(self.submit_request)
+
+        response = await backoff_request_submission(messages, max_response_tokens=max_response_tokens)
         logger.debug("------- RAW RESPONSE ----------")
         logger.debug(response["choices"])
         logger.debug("------- END RAW RESPONSE ----------")
-        extracted_json = self.extract_json(response, self.extract_type)
+        extracted_json, fixed_payload = self.extract_json(response, self.extract_type)
 
         # Cast to schema model
         if extracted_json is None:
@@ -103,9 +140,9 @@ class GPTJSON(Generic[SchemaType]):
         # Allow pydantic to handle the validation
         if isinstance(extracted_json, list):
             model = get_args(self.schema_model)[0]
-            return [model(**item) for item in extracted_json]
+            return [model(**item) for item in extracted_json], fixed_payload
         else:
-            return self.schema_model(**extracted_json)
+            return self.schema_model(**extracted_json), fixed_payload
 
     def extract_json(self, completion_response, extract_type: ResponseType):
         """
@@ -124,32 +161,28 @@ class GPTJSON(Generic[SchemaType]):
         if extracted_response is None:
             return None
 
-        extracted_response = extracted_response.replace("True", "true")
-        extracted_response = extracted_response.replace("False", "false")
+        # Save the original response before we start modifying it
+        fixed_response = extracted_response
+        fixed_response, fixed_truncation = fix_truncated_json(fixed_response)
+        fixed_response, fixed_bools = fix_bools(fixed_response)
 
-        fixed_response = fix_truncated_json(extracted_response)
+        fixed_payload = FixTransforms(
+            fixed_bools=fixed_bools,
+            fixed_truncation=fixed_truncation,
+        )
 
         try:
-            return json_loads(fixed_response)
+            return json_loads(fixed_response), fixed_payload
         except JSONDecodeError as e:
             logger.debug("Extracted", extracted_response)
             logger.debug("Did parse", fixed_response)
             logger.error("JSON decode error, likely malformed json input", e)
-            return None
+            return None, fixed_payload
 
-    # Most requests succeed on the first try but we wrap it locally here in case
-    # there is some temporarily instability with the API. If there are longer periods
-    # of instability, there should be system-wide retries in a daemon.
-    @backoff.on_exception(
-        backoff.expo,
-        (RateLimitError, OpenAITimeout, APIConnectionError),
-        max_tries=6,
-        on_backoff=handle_backoff
-    )
     async def submit_request(
         self,
         messages: list[GPTMessage],
-        max_tokens: int | None,
+        max_response_tokens: int | None,
     ):
         logger.debug("------- START MESSAGE ----------")
         logger.debug(messages)
@@ -159,8 +192,8 @@ class GPTJSON(Generic[SchemaType]):
 
         optional_parameters = {}
 
-        if max_tokens:
-            optional_parameters["max_tokens"] = max_tokens
+        if max_response_tokens:
+            optional_parameters["max_tokens"] = max_response_tokens
 
         return await openai.ChatCompletion.acreate(
             model=self.model,
@@ -172,6 +205,7 @@ class GPTJSON(Generic[SchemaType]):
             timeout=self.timeout,
             api_key=self.api_key,
             **optional_parameters,
+            **self.openai_arguments,
         )
 
     def fill_message_template(self, message: GPTMessage, format_variables: dict[str, Any]):

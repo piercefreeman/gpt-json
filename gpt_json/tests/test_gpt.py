@@ -4,7 +4,7 @@ import openai
 import pytest
 
 from gpt_json.gpt import GPTJSON
-from gpt_json.models import GPTMessage, GPTMessageRole, GPTModelVersion
+from gpt_json.models import GPTMessage, GPTMessageRole, FixTransforms, GPTModelVersion
 from gpt_json.tests.shared import MySchema, MySubSchema
 from pydantic import BaseModel, Field
 
@@ -34,7 +34,7 @@ def test_cast_message_to_gpt_format(role_type: GPTMessageRole, expected: str):
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
-    "schema_typehint,response_raw,parsed",
+    "schema_typehint,response_raw,parsed,expected_transformations",
     [
         (
             MySchema,
@@ -59,7 +59,8 @@ def test_cast_message_to_gpt_format(role_type: GPTMessageRole, expected: str):
                     name="Test"
                 ),
                 reason=True,
-            )
+            ),
+            FixTransforms()
         ),
         (
             list[MySchema],
@@ -88,11 +89,37 @@ def test_cast_message_to_gpt_format(role_type: GPTMessageRole, expected: str):
                     ),
                     reason=True,
                 )                
-            ]
-        )
+            ],
+            FixTransforms()
+        ),
+        (
+            MySchema,
+            """
+            Your response is as follows:
+            {
+                "text": "Test",
+                "numerical": 123,
+                "reason": True,
+                "sub_element": {
+                    "name": "Test"
+                },
+                "items": ["Item 1", "Item 2
+
+            """,
+            MySchema(
+                text="Test",
+                items=["Item 1", "Item 2"],
+                numerical=123,
+                sub_element=MySubSchema(
+                    name="Test"
+                ),
+                reason=True,
+            ),
+            FixTransforms(fixed_bools=True, fixed_truncation=True),
+        ),
     ]
 )
-async def test_acreate(schema_typehint, response_raw, parsed):
+async def test_acreate(schema_typehint, response_raw, parsed, expected_transformations: FixTransforms):
     model_version = GPTModelVersion.GPT_3_5
     messages = [
         GPTMessage(
@@ -130,7 +157,7 @@ async def test_acreate(schema_typehint, response_raw, parsed):
         mock_acreate.__aenter__.return_value.__aenter__ = MagicMock(return_value=mock_response)
 
         # Call the function and pass the expected parameters
-        response = await model.run(messages=messages)
+        response, transformations = await model.run(messages=messages)
 
         # Assert that the mock function was called with the expected parameters
         mock_acreate.assert_called_with(
@@ -148,6 +175,7 @@ async def test_acreate(schema_typehint, response_raw, parsed):
         )
 
     assert response == parsed
+    assert transformations == expected_transformations
 
 
 @pytest.mark.parametrize(

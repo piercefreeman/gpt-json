@@ -1,7 +1,7 @@
 from re import DOTALL, finditer
 
 from gpt_json.models import ResponseType
-from gpt_json.truncation import is_truncated
+from gpt_json.transformations import is_truncated
 
 
 def find_json_response(full_response, extract_type):
