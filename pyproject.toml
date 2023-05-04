@@ -1,7 +1,7 @@
 [tool.poetry]
 name = "gpt-json"
 version = "0.1.1"
-description = ""
+description = "Structured and typehinted GPT responses in Python."
 authors = ["Pierce Freeman <pierce@freeman.vc>"]
 readme = "README.md"
 packages = [{include = "gpt_json"}]
