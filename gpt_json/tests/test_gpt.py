@@ -143,6 +143,7 @@ async def test_acreate(schema_typehint, response_raw, parsed):
             ],
             temperature=0.0,
             timeout=60,
+            api_key=None,
         )
 
     assert response == parsed
