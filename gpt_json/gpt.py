@@ -15,9 +15,17 @@ from gpt_json.parsers import find_json_response
 from gpt_json.truncation import fix_truncated_json
 from gpt_json.prompts import generate_schema_prompt
 
+import logging
+
+logger = logging.getLogger('my_logger')
+handler = logging.StreamHandler()
+formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+handler.setFormatter(formatter)
+logger.addHandler(handler)
+
 
 def handle_backoff(details):
-    print(
+    logger.warning(
         "Backing off {wait:0.1f} seconds after {tries} tries "
         "calling function {target} with args {args} and kwargs "
         "{kwargs}".format(**details)
@@ -76,9 +84,9 @@ class GPTJSON(Generic[SchemaType]):
         max_tokens: int | None = None,
     ) -> SchemaType | None:
         response = await self.submit_request(messages, max_tokens=max_tokens)
-        print("------- RAW RESPONSE ----------")
-        print(response["choices"])
-        print("------- END RAW RESPONSE ----------")
+        logger.debug("------- RAW RESPONSE ----------")
+        logger.debug(response["choices"])
+        logger.debug("------- END RAW RESPONSE ----------")
         extracted_json = self.extract_json(response, self.extract_type)
 
         # Cast to schema model
@@ -100,7 +108,7 @@ class GPTJSON(Generic[SchemaType]):
         choices = completion_response["choices"]
 
         if not choices:
-            print("No choices available, should report error...")
+            logger.warning("No choices available, should report error...")
             return None
 
         full_response = choices[0]["message"]["content"]
@@ -117,9 +125,9 @@ class GPTJSON(Generic[SchemaType]):
         try:
             return json_loads(fixed_response)
         except JSONDecodeError as e:
-            print("Extracted", extracted_response)
-            print("Did parse", fixed_response)
-            print("JSON decode error, likely malformed json input", e)
+            logger.debug("Extracted", extracted_response)
+            logger.debug("Did parse", fixed_response)
+            logger.error("JSON decode error, likely malformed json input", e)
             return None
 
     # Most requests succeed on the first try but we wrap it locally here in case
@@ -141,9 +149,9 @@ class GPTJSON(Generic[SchemaType]):
             for message in messages
         ]
 
-        print("------- START MESSAGE ----------")
-        print(messages)
-        print("------- END MESSAGE ----------")
+        logger.debug("------- START MESSAGE ----------")
+        logger.debug(messages)
+        logger.debug("------- END MESSAGE ----------")
         if self.auto_trim:
             messages = self.trim_messages(messages, self.max_tokens)
 
@@ -217,6 +225,7 @@ class GPTJSON(Generic[SchemaType]):
                 if remaining_tokens > 0:
                     cropped_message = enc.decode(tokens[:remaining_tokens])
                     filtered_messages.append(cropped_message)
+                current_token_count += remaining_tokens
                 break
 
         # Recreate the messages with our new text
@@ -230,12 +239,12 @@ class GPTJSON(Generic[SchemaType]):
 
         # Log a copy of the message array if we have to crop it
         if current_token_count != original_token_count:
-            print(
+            logger.debug(
                 f"Trimmed message from {original_token_count} to {current_token_count} tokens",
                 new_messages,
             )
         else:
-            print(f"Skipping trim ({original_token_count}) ({current_token_count})")
+            logger.debug(f"Skipping trim ({original_token_count}) ({current_token_count})")
 
         return new_messages
 

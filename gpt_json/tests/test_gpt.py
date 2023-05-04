@@ -147,3 +147,42 @@ async def test_acreate(schema_typehint, response_raw, parsed):
         )
 
     assert response == parsed
+
+
+@pytest.mark.parametrize(
+    "input_messages,expected_output_messages",
+    [
+        # Messages fit within max_tokens, no change expected
+        (
+            [
+                GPTMessage(role=GPTMessageRole.SYSTEM, content="Hello"),
+                GPTMessage(role=GPTMessageRole.USER, content="World!"),
+            ],
+            [
+                GPTMessage(role=GPTMessageRole.SYSTEM, content="Hello"),
+                GPTMessage(role=GPTMessageRole.USER, content="World!"),
+            ],
+        ),
+        # All messages trimmed to fit max_tokens
+        (
+            [
+                GPTMessage(role=GPTMessageRole.SYSTEM, content="Hello"),
+                GPTMessage(role=GPTMessageRole.USER, content="World" * 10000),
+            ],
+            [
+                GPTMessage(role=GPTMessageRole.SYSTEM, content="Hello"),
+                GPTMessage(role=GPTMessageRole.USER, content="World" * (8192-1)),
+            ],
+        ),
+    ],
+)
+def test_trim_messages(input_messages, expected_output_messages):
+    gpt = GPTJSON[MySchema](None, auto_trim=True, auto_trim_response_overhead=0)
+
+    output_messages = gpt.trim_messages(input_messages, n=8192)
+
+    assert len(output_messages) == len(expected_output_messages)
+
+    for output_message, expected_output_message in zip(output_messages, expected_output_messages):
+        assert output_message.role == expected_output_message.role
+        assert output_message.content == expected_output_message.content
