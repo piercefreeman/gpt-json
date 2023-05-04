@@ -9,7 +9,7 @@ Specifically this library:
 - Includes some lightweight transformations of the output to remove superfluous context and fix broken json
 - Includes retry logic for the most common API failures
 - Formats the JSON schema as a flexible prompt that can be added into any message
-- Supports tempating of prompts to allow for dynamic content
+- Supports templating of prompts to allow for dynamic content
 
 ## Getting Started
 
