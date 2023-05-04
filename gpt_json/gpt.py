@@ -180,7 +180,6 @@ class GPTJSON(Generic[SchemaType]):
                 SCHEMA_PROMPT_TEMPLATE_KEY: self.schema_prompt,
             }
         )
-        print("CONTENT", content)
 
         # We do this formatting in a separate pass so we can fill any template variables that might
         # have been left in the pydantic field typehints
