@@ -27,7 +27,9 @@ def generate_schema_prompt(schema: BaseModel | list[BaseModel]) -> str:
                 payload.append(f'"{key}": {value.type_.__name__.lower()}')
             if value.field_info.description:
                 payload[-1] += f' // {value.field_info.description}'
-        return '{' + ', '.join(payload) + '}'
+        # All brackets are double defined so they will passthrough a call to `.format()` where we
+        # pass custom variables
+        return '{{\n' + ',\n'.join(payload) + '\n}}'
 
     origin = get_origin(schema)
     args = get_args(schema)

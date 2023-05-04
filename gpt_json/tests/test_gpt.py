@@ -6,6 +6,7 @@ import pytest
 from gpt_json.gpt import GPTJSON
 from gpt_json.models import GPTMessage, GPTMessageRole, GPTModelVersion
 from gpt_json.tests.shared import MySchema, MySubSchema
+from pydantic import BaseModel, Field
 
 
 def test_throws_error_if_no_model_specified():
@@ -186,3 +187,22 @@ def test_trim_messages(input_messages, expected_output_messages):
     for output_message, expected_output_message in zip(output_messages, expected_output_messages):
         assert output_message.role == expected_output_message.role
         assert output_message.content == expected_output_message.content
+
+
+def test_fill_message_template():
+    class TestTemplateSchema(BaseModel):
+        template_field: str = Field(description="Max length {max_length}")
+
+    gpt = GPTJSON[TestTemplateSchema](None)
+    assert gpt.fill_message_template(
+        GPTMessage(
+            role=GPTMessageRole.USER,
+            content="My schema is here: {json_schema}"
+        ),
+        dict(
+            max_length=100,
+        )
+    ) == GPTMessage(
+        role=GPTMessageRole.USER,
+        content="My schema is here: {\n\"template_field\": str // Max length 100\n}"
+    )
