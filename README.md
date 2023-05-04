@@ -84,9 +84,9 @@ sentiment=1
 Detected sentiment: 1
 ```
 
-## Templates
+## Prompt Variables
 
-In addition to the `json_schema` template keyword, you can also add arbitrary keys into your messages.
+In addition to the `json_schema` template keyword, you can also add arbitrary variables into your messages. This allows you to more easily insert user generated content or dynamically generate prompts based on the results of previous messages.
 
 ```python
 class QuoteSchema(BaseModel):
@@ -104,22 +104,20 @@ response, _ = await gpt_json.run(
         GPTMessage(
             role=GPTMessageRole.SYSTEM,
             content=SYSTEM_PROMPT,
-            metadata={"sentiment": "happy"},
         ),
-    ]
+    ],
+    format_variables={"sentiment": "happy"},
 )
 ```
 
 When calling the `.run()` function you can pass it the values that should be filled in this template. This also extends to field descriptions as well, so you can specify custom behavior on a per-field basis.
 
 ```python
-class SentimentSchema(BaseModel):
-    sentiment: list[int] = Field(description="Max quantity {max_items}.")
+class QuoteSchema(BaseModel):
+    quotes: list[str] = Field(description="Max quantity {max_items}.")
 
 SYSTEM_PROMPT = """
-Analyze the sentiment of the given text.
-
-Respond with the following JSON schema:
+Generate fictitious quotes that are {sentiment}.
 
 {json_schema}
 """
@@ -130,9 +128,9 @@ response, _ = await gpt_json.run(
         GPTMessage(
             role=GPTMessageRole.SYSTEM,
             content=SYSTEM_PROMPT,
-            metadata={"sentiment": "happy", "max_items": 5},
         ),
-    ]
+    ],
+    format_variables={"sentiment": "happy", "max_items": 5},
 )
 ```
 
