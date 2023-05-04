@@ -175,11 +175,15 @@ class GPTJSON(Generic[SchemaType]):
         )
 
     def fill_message_template(self, message: GPTMessage, format_variables: dict[str, Any]):
-        content = message.content.format(
-            **{
-                SCHEMA_PROMPT_TEMPLATE_KEY: self.schema_prompt,
-            }
-        )
+        auto_format = {
+            SCHEMA_PROMPT_TEMPLATE_KEY: self.schema_prompt,
+        }
+
+        # Regular quotes should passthrough to the next stage, except for our special keys
+        content = message.content.replace('{', '{{').replace('}', '}}')
+        for key in auto_format.keys():
+            content = content.replace("{{" + key + "}}", "{" + key + "}")
+        content = content.format(**auto_format)
 
         # We do this formatting in a separate pass so we can fill any template variables that might
         # have been left in the pydantic field typehints

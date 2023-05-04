@@ -197,12 +197,12 @@ def test_fill_message_template():
     assert gpt.fill_message_template(
         GPTMessage(
             role=GPTMessageRole.USER,
-            content="My schema is here: {json_schema}"
+            content="Variable: {max_length}\nMy schema is here: {json_schema}"
         ),
         dict(
             max_length=100,
         )
     ) == GPTMessage(
         role=GPTMessageRole.USER,
-        content="My schema is here: {\n\"template_field\": str // Max length 100\n}"
+        content="Variable: 100\nMy schema is here: {\n\"template_field\": str // Max length 100\n}"
     )
