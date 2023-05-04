@@ -82,6 +82,16 @@ sentiment=1
 Detected sentiment: 1
 ```
 
+## Other Configurations
+
+The `GPTJSON` class supports other configuration parameters at initialization.
+
+| Parameter                   | Type                   | Description                                                                                                                                                                            |
+|-----------------------------|------------------------|----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| model                       | GPTModelVersion \| str | (default: GPTModelVersion.GPT_4)                                                                                                                                                       |
+| auto_trim                   | bool                   | (default: False) - If your input prompt is too long, perhaps because of dynamic injected content, will automatically truncate the text to create enough room for the model's response. |
+| auto_trim_response_overhead | int                    | (default: 0) - If you're using auto_trim, configures the max amount of tokens to allow in the model's response.                                                                        |
+
 ## Comparison to Other Libraries
 
 A non-exhaustive list of other libraries that address the same problem. None of them were fully compatible with my deployment (hence this library), but check them out:
