@@ -1,7 +1,6 @@
 from re import DOTALL, finditer
 
 from gpt_json.models import ResponseType
-from gpt_json.truncation import is_truncated
 
 
 def find_json_response(full_response, extract_type):
@@ -26,12 +25,6 @@ def find_json_response(full_response, extract_type):
     if len(extracted_responses) > 1:
         print("Unexpected response > 1, continuing anyway...", extracted_responses)
 
-    extracted_response = extracted_responses[0]
-
-    if is_truncated(extracted_response.group(0)):
-        # Start at the same location and just expand to the end of the message
-        extracted_response = full_response[extracted_response.start():]
-    else:
-        extracted_response = extracted_response.group(0)
+    extracted_response = extracted_responses[0].group(0)
 
     return extracted_response

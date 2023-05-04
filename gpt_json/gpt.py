@@ -13,7 +13,7 @@ from typing import Any
 
 from gpt_json.models import GPTMessage, GPTModelVersion, ResponseType, FixTransforms
 from gpt_json.parsers import find_json_response
-from gpt_json.truncation import fix_truncated_json
+from gpt_json.transformations import fix_truncated_json, fix_bools
 from gpt_json.prompts import generate_schema_prompt
 
 import logging
@@ -131,7 +131,7 @@ class GPTJSON(Generic[SchemaType]):
         logger.debug("------- RAW RESPONSE ----------")
         logger.debug(response["choices"])
         logger.debug("------- END RAW RESPONSE ----------")
-        extracted_json = self.extract_json(response, self.extract_type)
+        extracted_json, fixed_payload = self.extract_json(response, self.extract_type)
 
         # Cast to schema model
         if extracted_json is None:
@@ -140,9 +140,9 @@ class GPTJSON(Generic[SchemaType]):
         # Allow pydantic to handle the validation
         if isinstance(extracted_json, list):
             model = get_args(self.schema_model)[0]
-            return [model(**item) for item in extracted_json]
+            return [model(**item) for item in extracted_json], fixed_payload
         else:
-            return self.schema_model(**extracted_json)
+            return self.schema_model(**extracted_json), fixed_payload
 
     def extract_json(self, completion_response, extract_type: ResponseType):
         """
@@ -161,18 +161,23 @@ class GPTJSON(Generic[SchemaType]):
         if extracted_response is None:
             return None
 
-        extracted_response = extracted_response.replace("True", "true")
-        extracted_response = extracted_response.replace("False", "false")
+        # Save the original response before we start modifying it
+        fixed_response = extracted_response
+        fixed_response, fixed_bools = fix_bools(fixed_response)
+        fixed_response, fixed_truncation = fix_truncated_json(fixed_response)
 
-        fixed_response = fix_truncated_json(extracted_response)
+        fixed_payload = FixTransforms(
+            fixed_bools=fixed_bools,
+            fixed_truncation=fixed_truncation,
+        )
 
         try:
-            return json_loads(fixed_response)
+            return json_loads(fixed_response), fixed_payload
         except JSONDecodeError as e:
             logger.debug("Extracted", extracted_response)
             logger.debug("Did parse", fixed_response)
             logger.error("JSON decode error, likely malformed json input", e)
-            return None
+            return None, fixed_payload
 
     async def submit_request(
         self,

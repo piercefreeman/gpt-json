@@ -26,7 +26,8 @@ class FixTransforms:
     """
     How a gpt payload was modified to be valid
     """
-    is_truncated: bool = False
+    fixed_truncation: bool = False
+    fixed_bools: bool = None
 
 
 @dataclass

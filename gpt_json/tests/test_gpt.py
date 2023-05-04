@@ -130,7 +130,7 @@ async def test_acreate(schema_typehint, response_raw, parsed):
         mock_acreate.__aenter__.return_value.__aenter__ = MagicMock(return_value=mock_response)
 
         # Call the function and pass the expected parameters
-        response = await model.run(messages=messages)
+        response, _ = await model.run(messages=messages)
 
         # Assert that the mock function was called with the expected parameters
         mock_acreate.assert_called_with(
