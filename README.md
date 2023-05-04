@@ -88,7 +88,7 @@ The `GPTJSON` class supports other configuration parameters at initialization.
 
 | Parameter                   | Type                   | Description                                                                                                                                                                            |
 |-----------------------------|------------------------|----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| model                       | GPTModelVersion \| str | (default: GPTModelVersion.GPT_4)                                                                                                                                                       |
+| model                       | GPTModelVersion \| str | (default: GPTModelVersion.GPT_4) - For convenience we provide the currently supported GPT model versions in the `GPTModelVersion` enum. You can also pass a string value if you want to use another more specific architecture.                                                                                                                                                       |
 | auto_trim                   | bool                   | (default: False) - If your input prompt is too long, perhaps because of dynamic injected content, will automatically truncate the text to create enough room for the model's response. |
 | auto_trim_response_overhead | int                    | (default: 0) - If you're using auto_trim, configures the max amount of tokens to allow in the model's response.                                                                        |
 
