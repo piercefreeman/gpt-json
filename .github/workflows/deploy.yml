@@ -1,7 +1,9 @@
 name: GPTJSON Tests
 
 on:
-  push
+  push:
+    tags:
+      - "*"
 
 jobs:
   run_tests:
