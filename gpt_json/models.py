@@ -22,6 +22,14 @@ class GPTModelVersion(Enum):
 
 
 @dataclass
+class FixTransforms:
+    """
+    How a gpt payload was modified to be valid
+    """
+    is_truncated: bool = False
+
+
+@dataclass
 class GPTMessage:
     """
     A single message in the chat sequence

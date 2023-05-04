@@ -11,7 +11,7 @@ from pydantic import BaseModel
 from tiktoken import encoding_for_model
 from typing import Any
 
-from gpt_json.models import GPTMessage, GPTModelVersion, ResponseType
+from gpt_json.models import GPTMessage, GPTModelVersion, ResponseType, FixTransforms
 from gpt_json.parsers import find_json_response
 from gpt_json.truncation import fix_truncated_json
 from gpt_json.prompts import generate_schema_prompt
@@ -63,6 +63,7 @@ class GPTJSON(Generic[SchemaType]):
             for the output payload. For GPT, initial prompt + response <= allowed tokens.
         :param temperature: Temperature (or variation) of response payload; 0 is the most deterministic, 1 is the most random
         :param timeout: Timeout in seconds for each OpenAI API calls
+        :param openai_max_retries: Amount of times to retry failed API calls, caused by often transient load or rate limit issues
         :param kwargs: Additional arguments to pass to OpenAI's `openai.Completion.create` method
 
         """
@@ -97,9 +98,20 @@ class GPTJSON(Generic[SchemaType]):
     async def run(
         self,
         messages: list[GPTMessage],
-        max_tokens: int | None = None,
+        max_response_tokens: int | None = None,
         format_variables: dict[str, Any] | None = None,
-    ) -> SchemaType | None:
+    ) -> tuple[SchemaType | None, FixTransforms]:
+        """
+        :param messages: List of GPTMessage objects to send to the API
+        :param max_response_tokens: Maximum number of tokens allowed in the response
+        :param format_variables: Variables to format into the message template. Uses standard
+            Python string formatting, like "Hello {name}".format(name="World")
+
+        :return: Tuple of (parsed response, fix transforms). The transformations here is a object that
+            contains the allowed modifications that we might do to cleanup a GPT payload. It allows client callers
+            to decide whether they want to allow the modifications or not.
+
+        """
         messages = [
             self.fill_message_template(message, format_variables or {})
             for message in messages
@@ -115,7 +127,7 @@ class GPTJSON(Generic[SchemaType]):
             on_backoff=handle_backoff
         )(self.submit_request)
 
-        response = await backoff_request_submission(messages, max_tokens=max_tokens)
+        response = await backoff_request_submission(messages, max_response_tokens=max_response_tokens)
         logger.debug("------- RAW RESPONSE ----------")
         logger.debug(response["choices"])
         logger.debug("------- END RAW RESPONSE ----------")
@@ -165,7 +177,7 @@ class GPTJSON(Generic[SchemaType]):
     async def submit_request(
         self,
         messages: list[GPTMessage],
-        max_tokens: int | None,
+        max_response_tokens: int | None,
     ):
         logger.debug("------- START MESSAGE ----------")
         logger.debug(messages)
@@ -175,8 +187,8 @@ class GPTJSON(Generic[SchemaType]):
 
         optional_parameters = {}
 
-        if max_tokens:
-            optional_parameters["max_tokens"] = max_tokens
+        if max_response_tokens:
+            optional_parameters["max_tokens"] = max_response_tokens
 
         return await openai.ChatCompletion.acreate(
             model=self.model,
