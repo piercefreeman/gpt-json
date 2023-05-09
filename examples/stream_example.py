@@ -5,7 +5,7 @@ import openai
 from gpt_json.stream_json import stream_json
 
 # DO NOT COMMIT THIS KEY
-openai.api_key = "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"
+openai.api_key = "yours here"
 
 def stream_tutor_response(problem, question):
     rendered_prompt = user_prompt_template.replace("{question}", question)
