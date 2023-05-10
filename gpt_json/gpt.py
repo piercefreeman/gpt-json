@@ -45,7 +45,7 @@ class GPTJSON(Generic[SchemaType]):
 
     def __init__(
         self,
-        api_key: str,
+        api_key: str | None = None,
         model: GPTModelVersion | str = GPTModelVersion.GPT_4,
         auto_trim: bool = False,
         auto_trim_response_overhead: int = 0,
@@ -56,7 +56,7 @@ class GPTJSON(Generic[SchemaType]):
         **kwargs,
     ):
         """
-        :param api_key: OpenAI API key
+        :param api_key: OpenAI API key, if `OPENAI_API_KEY` environment variable is not set
         :param model: GPTModelVersion or string model name
         :param auto_trim: If True, automatically trim messages to fit within the model's token limit
         :param auto_trim_response_overhead: If auto_trim is True, will leave at least `auto_trim_response_overhead` space
