@@ -1,7 +1,9 @@
+import logging
 from dataclasses import replace
 from json import loads as json_loads
 from json.decoder import JSONDecodeError
-from typing import Generic, List, Type, TypeVar, get_origin, get_args
+from typing import (Any, AsyncGenerator, Generic, List, Type, TypeVar,
+                    get_args, get_origin)
 
 import backoff
 import openai
@@ -9,14 +11,14 @@ from openai.error import APIConnectionError, RateLimitError
 from openai.error import Timeout as OpenAITimeout
 from pydantic import BaseModel
 from tiktoken import encoding_for_model
-from typing import Any
 
-from gpt_json.models import GPTMessage, GPTModelVersion, ResponseType, FixTransforms
-from gpt_json.parsers import find_json_response
-from gpt_json.transformations import fix_truncated_json, fix_bools
+from gpt_json.models import (FixTransforms, GPTMessage, GPTModelVersion,
+                             ResponseType)
+from gpt_json.parsers import find_json_response, parse_streamed_json
 from gpt_json.prompts import generate_schema_prompt
-
-import logging
+from gpt_json.transformations import fix_bools, fix_truncated_json
+from gpt_json.types_oai import ChatCompletionChunk
+from gpt_json.types_streaming import StreamingObject
 
 logger = logging.getLogger('my_logger')
 handler = logging.StreamHandler()
@@ -42,6 +44,7 @@ class GPTJSON(Generic[SchemaType]):
 
     """
     schema_model: Type[SchemaType] = None
+    streaming_type: Type[StreamingObject[SchemaType]] = None
 
     def __init__(
         self,
@@ -95,23 +98,18 @@ class GPTJSON(Generic[SchemaType]):
         self.schema_prompt = generate_schema_prompt(self.schema_model)
         self.api_key = api_key
 
-    async def run(
+    async def stream(
         self,
         messages: list[GPTMessage],
         max_response_tokens: int | None = None,
         format_variables: dict[str, Any] | None = None,
-    ) -> tuple[SchemaType | None, FixTransforms]:
+    ) -> AsyncGenerator[StreamingObject[SchemaType], None]:
         """
-        :param messages: List of GPTMessage objects to send to the API
-        :param max_response_tokens: Maximum number of tokens allowed in the response
-        :param format_variables: Variables to format into the message template. Uses standard
-            Python string formatting, like "Hello {name}".format(name="World")
-
-        :return: Tuple of (parsed response, fix transforms). The transformations here is a object that
-            contains the allowed modifications that we might do to cleanup a GPT payload. It allows client callers
-            to decide whether they want to allow the modifications or not.
-
+        STREAMING
         """
+        if self.extract_type != ResponseType.DICTIONARY:
+            raise NotImplementedError("For now, streaming is only supported for dictionary responses.")
+        
         messages = [
             self.fill_message_template(message, format_variables or {})
             for message in messages
@@ -127,22 +125,29 @@ class GPTJSON(Generic[SchemaType]):
             on_backoff=handle_backoff
         )(self.submit_request)
 
-        response = await backoff_request_submission(messages, max_response_tokens=max_response_tokens)
-        logger.debug("------- RAW RESPONSE ----------")
-        logger.debug(response["choices"])
-        logger.debug("------- END RAW RESPONSE ----------")
-        extracted_json, fixed_payload = self.extract_json(response, self.extract_type)
+        raw_responses = await backoff_request_submission(messages, max_response_tokens=max_response_tokens, stream=True)
 
-        # Cast to schema model
-        if extracted_json is None:
-            return None
+        prev_partial = None
+        cumulative_response = ""
+        async for raw_response in raw_responses:
+            response = ChatCompletionChunk.from_dict(raw_response)
 
-        # Allow pydantic to handle the validation
-        if isinstance(extracted_json, list):
-            model = get_args(self.schema_model)[0]
-            return [model(**item) for item in extracted_json], fixed_payload
-        else:
-            return self.schema_model(**extracted_json), fixed_payload
+            if response.choices[0].delta.role is not None:
+                # Ignore assistant role message
+                continue
+            if response.choices[0].finish_reason is not None:
+                # Ignore finish message 
+                continue
+            
+            cumulative_response += response.choices[0].delta.content
+            
+            partial_data, event = parse_streamed_json(cumulative_response)
+            partial_response = self.streaming_type(partial_data, prev_partial, event)
+
+            if prev_partial is None or prev_partial.partial_obj != partial_response.partial_obj:
+                yield partial_response
+                prev_partial = partial_response
+
 
     def extract_json(self, completion_response, extract_type: ResponseType):
         """
@@ -183,6 +188,7 @@ class GPTJSON(Generic[SchemaType]):
         self,
         messages: list[GPTMessage],
         max_response_tokens: int | None,
+        stream: bool = False,
     ):
         logger.debug("------- START MESSAGE ----------")
         logger.debug(messages)
@@ -204,6 +210,7 @@ class GPTJSON(Generic[SchemaType]):
             temperature=self.temperature,
             timeout=self.timeout,
             api_key=self.api_key,
+            stream=stream,
             **optional_parameters,
             **self.openai_arguments,
         )
@@ -297,4 +304,5 @@ class GPTJSON(Generic[SchemaType]):
     def __class_getitem__(cls, item):
         new_cls = super().__class_getitem__(item)
         new_cls.schema_model = item
+        new_cls.streaming_type = StreamingObject[item]
         return new_cls

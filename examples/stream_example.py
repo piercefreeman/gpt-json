@@ -1,53 +1,70 @@
+import asyncio
 import sys
+from os import getenv
 
-import openai
+from dotenv import load_dotenv
+from pydantic import BaseModel
 
-from gpt_json.stream_json import stream_json
+from examples.utils import make_blue, make_green, make_yellow
+from gpt_json import GPTJSON, GPTMessage, GPTMessageRole
+from gpt_json.models import GPTModelVersion
+from gpt_json.types_streaming import StreamEventEnum
 
-# DO NOT COMMIT THIS KEY
-openai.api_key = "yours here"
+load_dotenv()
+API_KEY = getenv("OPENAI_API_KEY")
 
-def stream_tutor_response(problem, question):
-    rendered_prompt = user_prompt_template.replace("{question}", question)
-    rendered_prompt = rendered_prompt.replace("{problem}", problem)
-    completion = openai.ChatCompletion.create(model="gpt-3.5-turbo", messages=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": rendered_prompt},
-            ], stream=True, max_tokens=700, temperature=0)
+SYSTEM_PROMPT = """
+You are a phenomenal and stubborn math tutor. Given the following problem, determine the best way to respond to the student by:
+1) Describing what the student does and does not understand about the problem in {student_model_key}
+2) Responding to the student's question in a way that does not give away the answer but helps them understand the problem better
 
-    return stream_json(completion)
+Problem: x^2 + 3 = 12 
 
+Respond with the following JSON schema:
 
-system_prompt = "You are an expert math tutor. You respond only in JSON in the specified format."
-user_prompt_template = """You are an expert math tutor. You respond only in JSON in the specified format. Do not print anything else.
+{json_schema}
+"""
 
-Problem: {problem} 
-Student Question: {question}
+class TutorSchema(BaseModel):
+    student_model: str
+    tutor_response: str
 
-Your task is to take answer the student question by responding with a JSON object in the following format:
-{
-    "internal_student_model": "{based on the student question, describe what the student does and does not understand about the problem}",
-    "internal_step_by_step": "{step by step solution to the problem}",
-    "tutor_response": "{provide your best response to the question}"
-}"""
+gpt_json = GPTJSON[TutorSchema](API_KEY, model=GPTModelVersion.GPT_4)
+
+async def main():
+    problem = "x^2 + 3 = 12"
+    print(make_blue("\nProblem:"), problem)
+
+    question = input("Ask question: ")
+    messages = [
+        GPTMessage(
+            role=GPTMessageRole.SYSTEM,
+            content=SYSTEM_PROMPT,
+        ),
+        GPTMessage(
+            role=GPTMessageRole.USER,
+            content=f"Student: {question}",
+        ),
+    ]
+
+    print(make_yellow("\nTeacher's thought process:"))
+    teacher_generator = gpt_json.stream(messages=messages, format_variables={"student_model_key": "student_model", "problem" : problem}) 
+    seen_keys = set()
+    async for partial_teacher in teacher_generator:
+        if partial_teacher.event == StreamEventEnum.OBJECT_CREATED:
+            continue
+
+        if partial_teacher.event == StreamEventEnum.KEY_UPDATED and partial_teacher.updated_key not in seen_keys:
+            print({
+            "student_model": "Thought: ",
+            "tutor_response": "Response to student: "
+            }[partial_teacher.updated_key], end="")
+            seen_keys.add(partial_teacher.updated_key)
+        
+        print(partial_teacher.value_change, end="")
+        if partial_teacher.event == StreamEventEnum.KEY_COMPLETED:
+            print("\n", end="")
+        sys.stdout.flush()
     
 if __name__ == "__main__":
-    problem = "x^2 + 3 = 12"
-    print("\nProblem:", problem)
-
-    while True:
-        question = input("Ask question: ")
-
-        print("\nTeacher's thought process:")
-        teacher_generator = stream_tutor_response(problem, question)
-        for teacher_data, token, event in teacher_generator:
-            if event == "new_key":
-                print({
-                "internal_student_model": "Thought: ",
-                "internal_step_by_step": "Problem Solution: ",
-                "tutor_response": "\nTeacher's Response: "
-                }[token], end="")
-            elif event == "value_changed":
-                print(token, end="")
-            sys.stdout.flush()
-        print()
+    asyncio.run(main())

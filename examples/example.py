@@ -2,8 +2,9 @@ import asyncio
 from os import getenv
 
 from dotenv import load_dotenv
-from gpt_json import GPTJSON, GPTMessage, GPTMessageRole
 from pydantic import BaseModel
+
+from gpt_json import GPTJSON, GPTMessage, GPTMessageRole
 
 load_dotenv()
 API_KEY = getenv("OPENAI_API_KEY")
@@ -21,7 +22,7 @@ Respond with the following JSON schema:
 
 async def runner():
     gpt_json = GPTJSON[SentimentSchema](API_KEY)
-    response = await gpt_json.run(
+    response, _ = await gpt_json.run(
         messages=[
             GPTMessage(
                 role=GPTMessageRole.SYSTEM,
