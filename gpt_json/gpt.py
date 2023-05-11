@@ -154,10 +154,16 @@ class GPTJSON(Generic[SchemaType]):
         format_variables: dict[str, Any] | None = None,
     ) -> AsyncGenerator[StreamingObject[SchemaType], None]:
         """
-        STREAMING
+        See `run` for documentation. This method is an async generator wrapper around `run` that streams partial results
+        instead of returning them all at once.
+
+        :return: yields `StreamingObject[SchemaType]`s. 
         """
         if self.extract_type != ResponseType.DICTIONARY:
             raise NotImplementedError("For now, streaming is only supported for dictionary responses.")
+        for field_type in self.schema_model.__annotations__.values():
+            if field_type != str:
+                raise NotImplementedError("For now, streaming is only supported for dictionary responses with string fields.")
         
         messages = [
             self.fill_message_template(message, format_variables or {})
