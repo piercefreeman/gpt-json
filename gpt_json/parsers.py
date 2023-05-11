@@ -49,9 +49,9 @@ def _is_valid_json(substring: str) -> bool:
 def _fix_broken_json(substring: str) -> tuple[str, str]:
     """Only works for a single JSON object with no nested objects and whose keys and values are strings.
     
-    Returns (fixed_json_string, complete_reason)
+    Returns (fixed_json_string, fix_reason)
     
-    complete_reason is one of: ["no_fix_needed", "unclosed_object", "unclosed_value", "missing_value", "unclosed_key"]
+    fix_reason is one of: ["empty_string", "no_fix_needed", "unclosed_object", "unclosed_value", "missing_value", "unclosed_key"]
     """
     if not len(substring.strip()):
         return "{}", "empty_string"
