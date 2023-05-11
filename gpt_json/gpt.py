@@ -97,6 +97,55 @@ class GPTJSON(Generic[SchemaType]):
 
         self.schema_prompt = generate_schema_prompt(self.schema_model)
         self.api_key = api_key
+    
+    async def run(
+        self,
+        messages: list[GPTMessage],
+        max_response_tokens: int | None = None,
+        format_variables: dict[str, Any] | None = None,
+    ) -> tuple[SchemaType | None, FixTransforms]:
+        """
+        :param messages: List of GPTMessage objects to send to the API
+        :param max_response_tokens: Maximum number of tokens allowed in the response
+        :param format_variables: Variables to format into the message template. Uses standard
+            Python string formatting, like "Hello {name}".format(name="World")
+
+        :return: Tuple of (parsed response, fix transforms). The transformations here is a object that
+            contains the allowed modifications that we might do to cleanup a GPT payload. It allows client callers
+            to decide whether they want to allow the modifications or not.
+
+        """
+        messages = [
+            self.fill_message_template(message, format_variables or {})
+            for message in messages
+        ]
+
+        # Most requests succeed on the first try but we wrap it locally here in case
+        # there is some temporarily instability with the API. If there are longer periods
+        # of instability, there should be system-wide retries in a daemon.
+        backoff_request_submission = backoff.on_exception(
+            backoff.expo,
+            (RateLimitError, OpenAITimeout, APIConnectionError),
+            max_tries=self.openai_max_retries,
+            on_backoff=handle_backoff
+        )(self.submit_request)
+
+        response = await backoff_request_submission(messages, max_response_tokens=max_response_tokens)
+        logger.debug("------- RAW RESPONSE ----------")
+        logger.debug(response["choices"])
+        logger.debug("------- END RAW RESPONSE ----------")
+        extracted_json, fixed_payload = self.extract_json(response, self.extract_type)
+
+        # Cast to schema model
+        if extracted_json is None:
+            return None
+
+        # Allow pydantic to handle the validation
+        if isinstance(extracted_json, list):
+            model = get_args(self.schema_model)[0]
+            return [model(**item) for item in extracted_json], fixed_payload
+        else:
+            return self.schema_model(**extracted_json), fixed_payload
 
     async def stream(
         self,
@@ -147,7 +196,6 @@ class GPTJSON(Generic[SchemaType]):
             if prev_partial is None or prev_partial.partial_obj != partial_response.partial_obj:
                 yield partial_response
                 prev_partial = partial_response
-
 
     def extract_json(self, completion_response, extract_type: ResponseType):
         """
