@@ -63,7 +63,7 @@ async def main():
         
         print(partial_teacher.value_change, end="")
         if partial_teacher.event == StreamEventEnum.KEY_COMPLETED:
-            print("\n", end="")
+            print()
         sys.stdout.flush()
     
 if __name__ == "__main__":
