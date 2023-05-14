@@ -34,7 +34,7 @@ class GPTFunction():
     #     new_cls.output_schema = output_schema
     #     return new_cls
         
-    # TODO: enable function pipelining, e.g.:
+    # TODO: maybe support function pipelining, e.g.:
     # pipeline = gpt_fn_1.pipe(gpt_fn_2)
     # output = await pipeline(input)
 
