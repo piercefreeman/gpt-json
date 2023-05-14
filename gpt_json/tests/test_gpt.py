@@ -150,11 +150,9 @@ async def test_acreate(schema_typehint, response_raw, parsed, expected_transform
     }
 
     # Create the mock
-    with patch.object(openai.ChatCompletion, "acreate", return_value=mock_response) as mock_acreate:
+    with patch.object(openai.ChatCompletion, "acreate") as mock_acreate:
         # Make the mock function asynchronous
-        mock_acreate.__aenter__.return_value = MagicMock()
-        mock_acreate.__aexit__.return_value = MagicMock()
-        mock_acreate.__aenter__.return_value.__aenter__ = MagicMock(return_value=mock_response)
+        mock_acreate.return_value = mock_response
 
         # Call the function and pass the expected parameters
         response, transformations = await model.run(messages=messages)
