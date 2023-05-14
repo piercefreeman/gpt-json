@@ -33,12 +33,3 @@ class GPTFunction():
     #     new_cls = super().__class_getitem__(input_schema, output_schema)
     #     new_cls.output_schema = output_schema
     #     return new_cls
-        
-    # TODO: maybe support function pipelining, e.g.:
-    # pipeline = gpt_fn_1.pipe(gpt_fn_2)
-    # output = await pipeline(input)
-
-    # TODO: maybe support `reduce` pattern, e.g. for summarizing long text:
-    # accumulate_summary = GPTFunction(...)
-    # summarize = accumulate_summary.reduce(text_chunks, initial="", accum_var="summary", next_var="text_chunk")
-    # { recursively calls accumulate_summary(summary=..., text_chunk=...) }
