@@ -228,6 +228,11 @@ class GPTJSON(Generic[SchemaType]):
             content=content,
         )
 
+    # TODO: type this better
+    def to_function(self, messages: list[GPTMessage], transforms: dict[str, Any]):
+        from gpt_json.gpt_function import GPTFunction  # avoid circular import
+        return GPTFunction(self, messages, transforms)
+
     def message_to_dict(self, message: GPTMessage):
         return {
             "role": message.role.value,
