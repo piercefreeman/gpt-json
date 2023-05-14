@@ -15,7 +15,7 @@ class GPTFunction():
     input_schema: InputSchemaType = None
     output_schema: OutputSchemaType = None
 
-    def __init__(self, gpt_json: GPTJSON, msgs: list[GPTMessage], transforms: dict[str, Any]):
+    def __init__(self, gpt_json: GPTJSON, msgs: list[GPTMessage], transforms: dict[str, Any]={}):
         self.gpt_json = gpt_json
         self.msgs = msgs
         self.transforms = transforms

@@ -5,6 +5,7 @@ from dotenv import load_dotenv
 from pydantic import BaseModel
 
 from gpt_json import GPTJSON, GPTMessage, GPTMessageRole
+from gpt_json.gpt_function import GPTFunction
 from gpt_json.models import GPTModelVersion
 
 load_dotenv()
@@ -24,21 +25,15 @@ Respond with the following JSON schema:
 
 async def criteria_semantic(text: str, criteria: str) -> bool:
     """Returns whether the text satisfies the criteria."""
-    gpt_json = GPTJSON[CriteriaSchema](API_KEY, model= GPTModelVersion.GPT_3_5)
-    response, _ = await gpt_json.run(
-        messages=[
-            GPTMessage(
-                role=GPTMessageRole.SYSTEM,
-                content=SYSTEM_PROMPT,
-            ),
-            GPTMessage(
-                role=GPTMessageRole.USER,
-                content=f"Text: {text}",
-            )
-        ],
-        format_variables={
-            "criteria": criteria
-        }
-    )
-
-    return response.satisfactory
+    _criteria_gpt_json = GPTJSON[CriteriaSchema](API_KEY, model= GPTModelVersion.GPT_3_5)
+    _criteria_semantic = GPTFunction(_criteria_gpt_json, [
+        GPTMessage(
+            role=GPTMessageRole.SYSTEM,
+            content=SYSTEM_PROMPT,
+        ),
+        GPTMessage(
+            role=GPTMessageRole.USER,
+            content="Text: {text}",
+        )
+    ])
+    return (await _criteria_semantic(text=text, criteria=criteria)).satisfactory
