@@ -2,7 +2,8 @@ from json import loads as json_loads
 
 import pytest
 
-from gpt_json.transformations import fix_truncated_json, fix_bools
+from gpt_json.transformations import (fix_bools, fix_streamed_json,
+                                      fix_truncated_json)
 
 
 @pytest.mark.parametrize(
@@ -37,6 +38,12 @@ def test_is_truncated(input_string: str, expected: bool):
         # observed examples
         ('[{"key1": [123]', [{"key1": [123]}]),
         ('{"key1": [\n"abc",\n "def', {"key1": ["abc", "def"]}),
+        # streaming-specific examples
+        ('[\n', []),
+        ('[\n{\n', [{}]),
+        ('{\n', {}),
+        ('[{"broken_key', [{"broken_key": None}]),
+        ('[{"key_with_no_value":', [{"key_with_no_value": None}]),
     ]
 )
 def test_fix_truncated_json(broken_string, expected):
@@ -47,6 +54,7 @@ def test_fix_truncated_json(broken_string, expected):
     print("ACTUAL", fixed_string)
 
     assert json_loads(fixed_string) == expected
+
 
 @pytest.mark.parametrize(
     "input_str, expected_output",

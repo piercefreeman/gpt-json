@@ -20,7 +20,7 @@ class StreamingObject(Generic[SchemaType]):
   event: StreamEventEnum
   partial_obj: SchemaType
 
-  def __init__(self, obj_data: dict[str, str], prev_partial: 'StreamingObject[SchemaType]', proposed_event: StreamEventEnum, value_change: str | None = None) -> None:
+  def __init__(self, obj_data: dict[str, str], prev_partial: 'StreamingObject[SchemaType]', proposed_event: StreamEventEnum) -> None:
      super().__init__()
      
      # compute which key was most recently updated 
@@ -40,6 +40,7 @@ class StreamingObject(Generic[SchemaType]):
      self.partial_obj = self.schema_model(**cleaned_obj_data)
 
      # compute value update if relevant
+     self.value_change = None
      if self.event in [StreamEventEnum.KEY_UPDATED, StreamEventEnum.KEY_COMPLETED]:
         prev_value = prev_partial.partial_obj.dict()[self.updated_key]
         self.value_change = self.partial_obj.dict()[self.updated_key].replace(prev_value, "")

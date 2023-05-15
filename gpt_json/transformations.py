@@ -1,3 +1,6 @@
+import json
+
+
 def build_stack(json_str):
     stack = []
     fixed_str = ''
@@ -16,7 +19,7 @@ def build_stack(json_str):
             open_quotes = not open_quotes
 
         fixed_str += char
-
+    
     return (stack, fixed_str, open_quotes)
 
 def is_truncated(json_str):
@@ -28,10 +31,11 @@ def is_truncated(json_str):
     stack, _, _ = build_stack(json_str)
     return len(stack) > 0
 
+
 def fix_truncated_json(json_str):
     """
     Simple json parser that attempts to fix truncated json that might
-    be caused by the API response being too long.
+    be caused by response streaming or the API response being too long.
 
     """
     stack, fixed_str, open_quotes = build_stack(json_str)
@@ -41,21 +45,31 @@ def fix_truncated_json(json_str):
 
     fixed_str = fixed_str.strip()
 
+    # propose null cases to handle missing values in truncated JSON string
+    proposed_fixed_strs = [fixed_str, fixed_str + ' null']
     if open_quotes:
-        fixed_str += '"'
+        proposed_fixed_strs = [fixed_str + '"', fixed_str + '": null']
 
-    # Ensure we don't have trailing commas
-    fixed_str = fixed_str.strip().rstrip(",")
+    for fixed_str in proposed_fixed_strs:
+        # Ensure we don't have trailing commas
+        fixed_str = fixed_str.strip().rstrip(",")
 
-    # If we still have nested items remaining in our stack,
-    # unwind it into the fixed string
-    if stack:
-        # Unwind the stack by filling it with the closing character
-        # of the current nested level
-        close_stack = ["]" if char == "[" else "}" for char in stack]
-        fixed_str += ''.join(close_stack[::-1])
+        # If we still have nested items remaining in our stack,
+        # unwind it into the fixed string
+        if stack:
+            # Unwind the stack by filling it with the closing character
+            # of the current nested level
+            close_stack = ["]" if char == "[" else "}" for char in stack]
+            fixed_str += ''.join(close_stack[::-1])
+        
+        # if the fixed string is valid JSON, return it
+        try:
+            json.loads(fixed_str)
+            return fixed_str, True
+        except json.decoder.JSONDecodeError:
+            pass
 
-    return fixed_str, True
+    raise ValueError("Unable to fix truncated JSON string")
 
 
 def fix_bools(json_str):
