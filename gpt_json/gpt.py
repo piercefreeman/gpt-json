@@ -174,9 +174,9 @@ class GPTJSON(Generic[SchemaType]):
         try:
             return json_loads(fixed_response), fixed_payload
         except JSONDecodeError as e:
-            logger.debug("Extracted", extracted_response)
-            logger.debug("Did parse", fixed_response)
-            logger.error("JSON decode error, likely malformed json input", e)
+            logger.debug(f"Extracted: {extracted_response}")
+            logger.debug(f"Did parse: {fixed_response}")
+            logger.error(f"JSON decode error, likely malformed json input: {e}")
             return None, fixed_payload
 
     async def submit_request(
