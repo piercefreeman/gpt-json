@@ -9,6 +9,9 @@ def _tokenize(text):
     return [enc.decode([tok]) for tok in enc.encode(text)]
 
 def _get_expected_stream_partial_objs(full_object):
+    """This function implements the semantics of the behavior we expect from GPTJSON.stream().
+    It is only used for testing and demonstrative purposes.
+    """
     if isinstance(full_object, list):
         outer_partial = []
         yield outer_partial[:], StreamEventEnum.OBJECT_CREATED, None, None
