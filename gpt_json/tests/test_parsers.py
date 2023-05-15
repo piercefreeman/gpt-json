@@ -16,3 +16,13 @@ from gpt_json.parsers import find_json_response
 )
 def test_find_json_response(input_string, expected, extract_type):
     assert find_json_response(input_string, extract_type) == expected
+
+
+@pytest.mark.parametrize(
+    "input_string,expected,extract_type",
+    [
+        ('[{"key1": [123]', [{"key1": [123]}], ''),
+    ]
+)
+def test_fix_partial_json(input_string, expected_value, expected_fix_reason):
+    pass

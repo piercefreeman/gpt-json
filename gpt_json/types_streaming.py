@@ -9,7 +9,7 @@ class StreamEventEnum(Enum):
     OBJECT_CREATED = "OBJECT_CREATED"
     KEY_UPDATED = "KEY_UPDATED"
     KEY_COMPLETED = "KEY_COMPLETED"
-    OTHER = "OTHER"
+    AWAITING_FIRST_KEY = "AWAITING_FIRST_KEY"
 
 
 class StreamingObject(Generic[SchemaType]):
@@ -20,7 +20,7 @@ class StreamingObject(Generic[SchemaType]):
   event: StreamEventEnum
   partial_obj: SchemaType
 
-  def __init__(self, obj_data: dict, prev_partial: 'StreamingObject[SchemaType]', proposed_event: StreamEventEnum, value_change: str | None = None) -> None:
+  def __init__(self, obj_data: dict[str, str], prev_partial: 'StreamingObject[SchemaType]', proposed_event: StreamEventEnum, value_change: str | None = None) -> None:
      super().__init__()
      
      # compute which key was most recently updated 
@@ -29,8 +29,8 @@ class StreamingObject(Generic[SchemaType]):
      
      self.event = proposed_event
      if proposed_event == StreamEventEnum.KEY_UPDATED and self.updated_key is None:
-        # when there updated key is None, we haven't fully streamed the object's first key yet 
-        self.event = StreamEventEnum.OTHER
+        # when the updated key is None, we haven't fully streamed the object's first key yet 
+        self.event = StreamEventEnum.AWAITING_FIRST_KEY
      
      # TODO: this is hacky. ideally we want pydantic to implement Partial[SchemaType]
      # https://github.com/pydantic/pydantic/issues/1673

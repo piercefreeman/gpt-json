@@ -44,7 +44,6 @@ class GPTJSON(Generic[SchemaType]):
 
     """
     schema_model: Type[SchemaType] = None
-    streaming_type: Type[StreamingObject[SchemaType]] = None
 
     def __init__(
         self,
@@ -120,7 +119,15 @@ class GPTJSON(Generic[SchemaType]):
             for message in messages
         ]
 
-        backoff_request_submission = await self._backoff_submit_request()
+        # Most requests succeed on the first try but we wrap it locally here in case
+        # there is some temporarily instability with the API. If there are longer periods
+        # of instability, there should be system-wide retries in a daemon.
+        backoff_request_submission = backoff.on_exception(
+            backoff.expo,
+            (RateLimitError, OpenAITimeout, APIConnectionError),
+            max_tries=self.openai_max_retries,
+            on_backoff=handle_backoff
+        )(self.submit_request)
 
         response = await backoff_request_submission(messages, max_response_tokens=max_response_tokens)
         logger.debug("------- RAW RESPONSE ----------")
@@ -162,7 +169,15 @@ class GPTJSON(Generic[SchemaType]):
             for message in messages
         ]
 
-        backoff_request_submission = await self._backoff_submit_request()
+        # Most requests succeed on the first try but we wrap it locally here in case
+        # there is some temporarily instability with the API. If there are longer periods
+        # of instability, there should be system-wide retries in a daemon.
+        backoff_request_submission = backoff.on_exception(
+            backoff.expo,
+            (RateLimitError, OpenAITimeout, APIConnectionError),
+            max_tries=self.openai_max_retries,
+            on_backoff=handle_backoff
+        )(self.submit_request)
 
         raw_responses = await backoff_request_submission(messages, max_response_tokens=max_response_tokens, stream=True)
 
@@ -173,7 +188,7 @@ class GPTJSON(Generic[SchemaType]):
             logger.debug(raw_response)
             logger.debug(f"------- END RAW RESPONSE ----------")
 
-            response = ChatCompletionChunk.from_dict(raw_response)
+            response = ChatCompletionChunk(**raw_response)
 
             if response.choices[0].delta.role is not None:
                 # Ignore assistant role message
@@ -185,7 +200,7 @@ class GPTJSON(Generic[SchemaType]):
             cumulative_response += response.choices[0].delta.content
             
             partial_data, event = parse_streamed_json(cumulative_response)
-            partial_response = self.streaming_type(partial_data, prev_partial, event)
+            partial_response = StreamingObject[self.schema_model](partial_data, prev_partial, event)
 
             if prev_partial is None or prev_partial.partial_obj != partial_response.partial_obj:
                 yield partial_response
@@ -226,18 +241,6 @@ class GPTJSON(Generic[SchemaType]):
             logger.error("JSON decode error, likely malformed json input", e)
             return None, fixed_payload
     
-    async def _backoff_submit_request(self):
-        # Most requests succeed on the first try but we wrap it locally here in case
-        # there is some temporarily instability with the API. If there are longer periods
-        # of instability, there should be system-wide retries in a daemon.
-        return backoff.on_exception(
-            backoff.expo,
-            (RateLimitError, OpenAITimeout, APIConnectionError),
-            max_tries=self.openai_max_retries,
-            on_backoff=handle_backoff
-        )(self.submit_request)
-
-
     async def submit_request(
         self,
         messages: list[GPTMessage],
@@ -358,5 +361,4 @@ class GPTJSON(Generic[SchemaType]):
     def __class_getitem__(cls, item):
         new_cls = super().__class_getitem__(item)
         new_cls.schema_model = item
-        new_cls.streaming_type = StreamingObject[item]
         return new_cls

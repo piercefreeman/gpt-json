@@ -5,7 +5,6 @@ from os import getenv
 from dotenv import load_dotenv
 from pydantic import BaseModel
 
-from examples.utils import make_blue, make_green, make_yellow
 from gpt_json import GPTJSON, GPTMessage, GPTMessageRole
 from gpt_json.models import GPTModelVersion
 from gpt_json.types_streaming import StreamEventEnum
@@ -33,7 +32,7 @@ gpt_json = GPTJSON[TutorSchema](API_KEY, model=GPTModelVersion.GPT_4)
 
 async def main():
     problem = "x^2 + 3 = 12"
-    print(make_blue("\nProblem:"), problem)
+    print("\nProblem:", problem)
 
     question = input("Ask question: ")
     messages = [
@@ -47,7 +46,7 @@ async def main():
         ),
     ]
 
-    print(make_yellow("\nTeacher's thought process:"))
+    print("\nTeacher's thought process:")
     teacher_generator = gpt_json.stream(messages=messages, format_variables={"student_model_key": "student_model", "problem" : problem}) 
     seen_keys = set()
     async for partial_teacher in teacher_generator:
@@ -55,10 +54,11 @@ async def main():
             continue
 
         if partial_teacher.event == StreamEventEnum.KEY_UPDATED and partial_teacher.updated_key not in seen_keys:
-            print({
+            key_readable = {
             "student_model": "Thought: ",
             "tutor_response": "Response to student: "
-            }[partial_teacher.updated_key], end="")
+            }[partial_teacher.updated_key]
+            print(key_readable, end="")
             seen_keys.add(partial_teacher.updated_key)
         
         print(partial_teacher.value_change, end="")
