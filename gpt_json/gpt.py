@@ -153,13 +153,13 @@ class GPTJSON(Generic[SchemaType]):
 
         if not choices:
             logger.warning("No choices available, should report error...")
-            return None
+            return None, None
 
         full_response = choices[0]["message"]["content"]
 
         extracted_response = find_json_response(full_response, extract_type)
         if extracted_response is None:
-            return None
+            return None, None
 
         # Save the original response before we start modifying it
         fixed_response = extracted_response
