@@ -1,4 +1,5 @@
 import json
+from enum import Enum
 
 
 def build_stack(json_str):
@@ -31,17 +32,23 @@ def is_truncated(json_str):
     stack, _, _ = build_stack(json_str)
     return len(stack) > 0
 
+class JsonFixEnum(Enum):
+    UNCLOSED_OBJECT = "unclosed_object"
+    UNCLOSED_KEY = "unclosed_key"
+    UNCLOSED_VALUE = "unclosed_value"
+    MISSING_VALUE = "missing_value"
 
-def fix_truncated_json(json_str):
+def fix_truncated_json(json_str) -> tuple[str, JsonFixEnum | None]:
     """
     Simple json parser that attempts to fix truncated json that might
     be caused by response streaming or the API response being too long.
 
+    Returns a tuple of (fixed_json_string, fix_type)
     """
     stack, fixed_str, open_quotes = build_stack(json_str)
     is_truncated = len(stack) > 0
     if not is_truncated:
-        return json_str, False
+        return json_str, None
 
     fixed_str = fixed_str.strip()
 
@@ -50,7 +57,9 @@ def fix_truncated_json(json_str):
     if open_quotes:
         proposed_fixed_strs = [fixed_str + '"', fixed_str + '": null']
 
-    for fixed_str in proposed_fixed_strs:
+    for idx, fixed_str in enumerate(proposed_fixed_strs):
+        is_null_case = idx == 1
+        
         # Ensure we don't have trailing commas
         fixed_str = fixed_str.strip().rstrip(",")
 
@@ -63,9 +72,14 @@ def fix_truncated_json(json_str):
             fixed_str += ''.join(close_stack[::-1])
         
         # if the fixed string is valid JSON, return it
+        fix = JsonFixEnum.UNCLOSED_OBJECT
+        if open_quotes:
+            fix = JsonFixEnum.UNCLOSED_KEY if is_null_case else JsonFixEnum.UNCLOSED_VALUE
+        elif is_null_case:
+            fix = JsonFixEnum.MISSING_VALUE
         try:
             json.loads(fixed_str)
-            return fixed_str, True
+            return fixed_str, fix
         except json.decoder.JSONDecodeError:
             pass
 
