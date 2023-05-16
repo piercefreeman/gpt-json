@@ -46,7 +46,6 @@ def prepare_streaming_object(schema_model: SchemaType, curr_partial_raw: dict[st
    # my fix is to create the schema object with all string values for now
    cleaned_obj_data = {field: "" for field, typ in schema_model.__fields__.items()}
    cleaned_obj_data.update({k:v for k,v in curr_partial_raw.items() if v is not None})
-   print(cleaned_obj_data)
    partial_obj = schema_model(**cleaned_obj_data)
 
    # compute value update if relevant
@@ -58,7 +57,6 @@ def prepare_streaming_object(schema_model: SchemaType, curr_partial_raw: dict[st
          value_change = curr_value.replace(prev_value, "")
       else:
          value_change = curr_value
-      print(event, updated_key, value_change)
    
    return StreamingObject[schema_model](
       value_change=value_change,
