@@ -7,7 +7,7 @@ from pydantic import BaseModel
 
 from gpt_json import GPTJSON, GPTMessage, GPTMessageRole
 from gpt_json.models import GPTModelVersion
-from gpt_json.types_streaming import StreamEventEnum
+from gpt_json.streaming import StreamEventEnum
 
 load_dotenv()
 API_KEY = getenv("OPENAI_API_KEY")

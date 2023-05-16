@@ -2,8 +2,9 @@ import json
 from re import DOTALL, finditer
 
 from gpt_json.models import ResponseType
-from gpt_json.transformations import is_truncated
-from gpt_json.types_streaming import StreamEventEnum
+from gpt_json.streaming import StreamEventEnum
+from gpt_json.transformations import (JsonFixEnum, fix_truncated_json,
+                                      is_truncated)
 
 
 def find_json_response(full_response, extract_type):
@@ -39,74 +40,4 @@ def find_json_response(full_response, extract_type):
     return extracted_response
 
 
-def _is_valid_json(substring: str) -> bool:
-    try:
-        json.loads(substring)
-        return True
-    except json.decoder.JSONDecodeError:
-        return False
-
-def _fix_broken_json(substring: str) -> tuple[str, str]:
-    """Only works for a single JSON object with no nested objects and whose keys and values are strings.
-    
-    Returns (fixed_json_string, fix_reason)
-    
-    fix_reason is one of: ["empty_string", "no_fix_needed", "unclosed_object", "unclosed_value", "missing_value", "unclosed_key"]
-    """
-    if not len(substring.strip()):
-        return "{}", "empty_string"
-    
-    # If the substring is already valid JSON, return it as is
-    if _is_valid_json(substring):
-        return substring, "no_fix_needed"
-    
-    # fix an unclosed object
-    fixed_substring = substring + "}"
-    if _is_valid_json(fixed_substring):
-        return fixed_substring, "unclosed_object"
-
-    # fix an unclosed object with a dangling comma
-    fixed_substring = substring.strip()[:-1] + "}"
-    if _is_valid_json(fixed_substring):
-        return fixed_substring, "unclosed_object"
-
-    # fix an unclosed value
-    fixed_substring = substring + '"}'
-    if _is_valid_json(fixed_substring):
-        return fixed_substring, "unclosed_value"
-
-    # fix a missing value
-    fixed_substring = substring + ' null}'
-    if _is_valid_json(fixed_substring):
-        return fixed_substring, "missing_value"
-
-    # fix a missing value w/ colon
-    fixed_substring = substring + ': null}'
-    if _is_valid_json(fixed_substring):
-        return fixed_substring, "missing_value"
-
-    # fix an unclosed key
-    fixed_substring = substring + '": null}'
-    if _is_valid_json(fixed_substring):
-        return fixed_substring, "unclosed_key"
-
-    # fix an unclosed key that has only the starting quote
-    fixed_substring = substring[:-1] + '}'
-    if _is_valid_json(fixed_substring):
-        return fixed_substring, "unclosed_key"
-    
-    return fixed_substring, None
-
-def parse_streamed_json(substring: str) -> tuple[dict, StreamEventEnum]:
-    fixed_json_str, fix_reason = _fix_broken_json(substring)
-
-    event = StreamEventEnum.KEY_UPDATED
-    if fix_reason == "unclosed_object":
-        if fixed_json_str.count("\"") == 0:
-            event = StreamEventEnum.OBJECT_CREATED
-        else:
-            event = StreamEventEnum.KEY_COMPLETED
-
-    
-    return json.loads(fixed_json_str), event
     

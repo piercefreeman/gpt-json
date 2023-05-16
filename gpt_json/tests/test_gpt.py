@@ -2,11 +2,12 @@ from unittest.mock import MagicMock, patch
 
 import openai
 import pytest
+from pydantic import BaseModel, Field
 
 from gpt_json.gpt import GPTJSON
-from gpt_json.models import GPTMessage, GPTMessageRole, FixTransforms, GPTModelVersion
+from gpt_json.models import (FixTransforms, GPTMessage, GPTMessageRole,
+                             GPTModelVersion)
 from gpt_json.tests.shared import MySchema, MySubSchema
-from pydantic import BaseModel, Field
 
 
 def test_throws_error_if_no_model_specified():

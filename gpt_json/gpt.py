@@ -14,11 +14,12 @@ from tiktoken import encoding_for_model
 
 from gpt_json.models import (FixTransforms, GPTMessage, GPTModelVersion,
                              ResponseType)
-from gpt_json.parsers import find_json_response, parse_streamed_json
+from gpt_json.parsers import find_json_response
 from gpt_json.prompts import generate_schema_prompt
+from gpt_json.streaming import (StreamingObject, parse_streamed_json,
+                                prepare_streaming_object)
 from gpt_json.transformations import fix_bools, fix_truncated_json
 from gpt_json.types_oai import ChatCompletionChunk
-from gpt_json.types_streaming import StreamingObject
 
 logger = logging.getLogger('my_logger')
 handler = logging.StreamHandler()
@@ -162,8 +163,8 @@ class GPTJSON(Generic[SchemaType]):
             raise NotImplementedError("For now, streaming is only supported for dictionary responses.")
         for field_type in self.schema_model.__annotations__.values():
             if field_type != str:
-                raise NotImplementedError("For now, streaming is only supported for dictionary responses with string fields.")
-        
+                raise NotImplementedError("For now, streaming is not supported for nested dictionary responses.")
+            
         messages = [
             self.fill_message_template(message, format_variables or {})
             for message in messages
@@ -200,12 +201,13 @@ class GPTJSON(Generic[SchemaType]):
             cumulative_response += response.choices[0].delta.content
             
             partial_data, event = parse_streamed_json(cumulative_response)
-            partial_response = StreamingObject[self.schema_model](partial_data, prev_partial, event)
+            partial_response = prepare_streaming_object(self.schema_model, partial_data, prev_partial, event)
 
             if prev_partial is None or prev_partial.partial_obj != partial_response.partial_obj:
                 yield partial_response
                 prev_partial = partial_response
-
+            
+        
     def extract_json(self, completion_response, extract_type: ResponseType):
         """
         Assumes one main block of results, either list of dictionary
