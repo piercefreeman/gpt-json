@@ -2,11 +2,12 @@ from unittest.mock import MagicMock, patch
 
 import openai
 import pytest
+from pydantic import BaseModel, Field
 
 from gpt_json.gpt import GPTJSON
-from gpt_json.models import GPTMessage, GPTMessageRole, FixTransforms, GPTModelVersion
+from gpt_json.models import (FixTransforms, GPTMessage, GPTMessageRole,
+                             GPTModelVersion)
 from gpt_json.tests.shared import MySchema, MySubSchema
-from pydantic import BaseModel, Field
 
 
 def test_throws_error_if_no_model_specified():
@@ -215,6 +216,24 @@ def test_trim_messages(input_messages, expected_output_messages):
     for output_message, expected_output_message in zip(output_messages, expected_output_messages):
         assert output_message.role == expected_output_message.role
         assert output_message.content == expected_output_message.content
+
+def test_two_gptjsons():
+    class TestSchema1(BaseModel):
+        field1: str
+    class TestSchema2(BaseModel):
+        field2: str
+    
+    gptjson1 = GPTJSON[TestSchema1](None)
+
+    # shouldn't allow instantion without a schema
+    with pytest.raises(ValueError):
+        gptjson2 = GPTJSON(None)
+    
+    gptjson2 = GPTJSON[TestSchema2](None)
+
+    assert gptjson1.schema_model == TestSchema1
+    assert gptjson2.schema_model == TestSchema2
+
 
 
 def test_fill_message_template():

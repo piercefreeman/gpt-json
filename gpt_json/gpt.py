@@ -1,7 +1,8 @@
+import logging
 from dataclasses import replace
 from json import loads as json_loads
 from json.decoder import JSONDecodeError
-from typing import Generic, List, Type, TypeVar, get_origin, get_args
+from typing import Any, Generic, List, Type, TypeVar, get_args, get_origin
 
 import backoff
 import openai
@@ -9,14 +10,12 @@ from openai.error import APIConnectionError, RateLimitError
 from openai.error import Timeout as OpenAITimeout
 from pydantic import BaseModel
 from tiktoken import encoding_for_model
-from typing import Any
 
-from gpt_json.models import GPTMessage, GPTModelVersion, ResponseType, FixTransforms
+from gpt_json.models import (FixTransforms, GPTMessage, GPTModelVersion,
+                             ResponseType)
 from gpt_json.parsers import find_json_response
-from gpt_json.transformations import fix_truncated_json, fix_bools
 from gpt_json.prompts import generate_schema_prompt
-
-import logging
+from gpt_json.transformations import fix_bools, fix_truncated_json
 
 logger = logging.getLogger('my_logger')
 handler = logging.StreamHandler()
@@ -41,6 +40,7 @@ class GPTJSON(Generic[SchemaType]):
     A wrapper over GPT that provides basic JSON parsing and response handling.
 
     """
+    _cls_schema_model: Type[SchemaType] = None
     schema_model: Type[SchemaType] = None
 
     def __init__(
@@ -73,6 +73,8 @@ class GPTJSON(Generic[SchemaType]):
         self.timeout = timeout
         self.openai_max_retries = openai_max_retries
         self.openai_arguments = kwargs
+        self.schema_model = self._cls_schema_model
+        GPTJSON._cls_schema_model = None
 
         if not self.schema_model:
             raise ValueError("GPTJSON needs to be instantiated with a schema model, like GPTJSON[MySchema](...args).")
@@ -296,5 +298,5 @@ class GPTJSON(Generic[SchemaType]):
 
     def __class_getitem__(cls, item):
         new_cls = super().__class_getitem__(item)
-        new_cls.schema_model = item
+        new_cls._cls_schema_model = item
         return new_cls
