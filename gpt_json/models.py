@@ -1,22 +1,28 @@
 from dataclasses import dataclass
 from enum import Enum, unique
+import sys
 
+if sys.version_info >= (3, 11):
+    from enum import StrEnum
+    EnumSuper = (StrEnum,)
+else:
+    EnumSuper = (str, Enum)
 
 @unique
-class ResponseType(str, Enum):
+class ResponseType(*EnumSuper):
     DICTIONARY = "DICTIONARY"
     LIST = "LIST"
 
 
 @unique
-class GPTMessageRole(str, Enum):
+class GPTMessageRole(*EnumSuper):
     SYSTEM = "system"
     USER = "user"
     ASSISTANT = "assistant"
 
 
 @unique
-class GPTModelVersion(str, Enum):
+class GPTModelVersion(*EnumSuper):
     GPT_3_5 = "gpt-3.5-turbo"
     GPT_4 = "gpt-4-0314"
 
