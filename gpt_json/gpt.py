@@ -100,7 +100,7 @@ class GPTJSON(Generic[SchemaType]):
         messages: list[GPTMessage],
         max_response_tokens: int | None = None,
         format_variables: dict[str, Any] | None = None,
-    ) -> tuple[SchemaType | None, FixTransforms]:
+    ) -> tuple[SchemaType, FixTransforms] | tuple[None, None]:
         """
         :param messages: List of GPTMessage objects to send to the API
         :param max_response_tokens: Maximum number of tokens allowed in the response
@@ -135,7 +135,7 @@ class GPTJSON(Generic[SchemaType]):
 
         # Cast to schema model
         if extracted_json is None:
-            return None
+            return None, None
 
         # Allow pydantic to handle the validation
         if isinstance(extracted_json, list):

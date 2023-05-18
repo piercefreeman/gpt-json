@@ -232,3 +232,34 @@ def test_fill_message_template():
         role=GPTMessageRole.USER,
         content="Variable: 100\nMy schema is here: {\n\"template_field\": str // Max length 100\n}"
     )
+
+@pytest.mark.asyncio
+async def test_extracted_json_is_None():
+    gpt = GPTJSON[MySchema](None)
+
+    with patch.object(gpt, 'submit_request', return_value={'choices': [{'message': {'content': 'some content'}}]}), \
+         patch.object(gpt, 'extract_json', return_value=(None, FixTransforms(False, False))):
+        result, _ = await gpt.run([GPTMessage('system', 'message content')])
+        assert result is None
+
+@pytest.mark.asyncio
+async def test_no_valid_results_from_remote_request():
+    gpt = GPTJSON[MySchema](None)
+
+    with patch.object(gpt, 'submit_request', return_value={'choices': []}):
+        result, _ = await gpt.run([GPTMessage('system', 'message content')])
+        assert result is None
+
+@pytest.mark.asyncio
+async def test_unable_to_find_valid_json_payload():
+    gpt = GPTJSON[MySchema](None)
+
+    with patch.object(gpt, 'submit_request', return_value={'choices': [{'message': {'content': 'some content'}}]}), \
+         patch.object(gpt, 'extract_json', return_value=(None, FixTransforms(False, False))):
+        result, _ = await gpt.run([GPTMessage('system', 'message content')])
+        assert result is None
+
+@pytest.mark.asyncio
+async def test_unknown_model_to_infer_max_tokens():
+    with pytest.raises(ValueError):
+        GPTJSON[MySchema](model="UnknownModel", auto_trim=True)
