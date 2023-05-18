@@ -102,7 +102,7 @@ class GPTJSON(Generic[SchemaType]):
         messages: list[GPTMessage],
         max_response_tokens: int | None = None,
         format_variables: dict[str, Any] | None = None,
-    ) -> tuple[SchemaType | None, FixTransforms]:
+    ) -> tuple[SchemaType, FixTransforms] | tuple[None, None]:
         """
         :param messages: List of GPTMessage objects to send to the API
         :param max_response_tokens: Maximum number of tokens allowed in the response
@@ -137,7 +137,7 @@ class GPTJSON(Generic[SchemaType]):
 
         # Cast to schema model
         if extracted_json is None:
-            return None
+            return None, None
 
         # Allow pydantic to handle the validation
         if isinstance(extracted_json, list):
@@ -155,13 +155,13 @@ class GPTJSON(Generic[SchemaType]):
 
         if not choices:
             logger.warning("No choices available, should report error...")
-            return None
+            return None, None
 
         full_response = choices[0]["message"]["content"]
 
         extracted_response = find_json_response(full_response, extract_type)
         if extracted_response is None:
-            return None
+            return None, None
 
         # Save the original response before we start modifying it
         fixed_response = extracted_response
@@ -176,9 +176,9 @@ class GPTJSON(Generic[SchemaType]):
         try:
             return json_loads(fixed_response), fixed_payload
         except JSONDecodeError as e:
-            logger.debug("Extracted", extracted_response)
-            logger.debug("Did parse", fixed_response)
-            logger.error("JSON decode error, likely malformed json input", e)
+            logger.debug(f"Extracted: {extracted_response}")
+            logger.debug(f"Did parse: {fixed_response}")
+            logger.error(f"JSON decode error, likely malformed json input: {e}")
             return None, fixed_payload
 
     async def submit_request(
