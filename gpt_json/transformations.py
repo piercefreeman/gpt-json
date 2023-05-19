@@ -1,6 +1,6 @@
 def build_stack(json_str):
     stack = []
-    fixed_str = ''
+    fixed_str = ""
     open_quotes = False
 
     for i, char in enumerate(json_str):
@@ -12,12 +12,13 @@ def build_stack(json_str):
             elif char in "}]":
                 stack.pop()
         # opening or closing a string, only it's not escaped
-        if char == '"' and i > 0 and json_str[i-1] != "\\":
+        if char == '"' and i > 0 and json_str[i - 1] != "\\":
             open_quotes = not open_quotes
 
         fixed_str += char
 
     return (stack, fixed_str, open_quotes)
+
 
 def is_truncated(json_str):
     """
@@ -27,6 +28,7 @@ def is_truncated(json_str):
     """
     stack, _, _ = build_stack(json_str)
     return len(stack) > 0
+
 
 def fix_truncated_json(json_str):
     """
@@ -53,7 +55,7 @@ def fix_truncated_json(json_str):
         # Unwind the stack by filling it with the closing character
         # of the current nested level
         close_stack = ["]" if char == "[" else "}" for char in stack]
-        fixed_str += ''.join(close_stack[::-1])
+        fixed_str += "".join(close_stack[::-1])
 
     return fixed_str, True
 
@@ -66,23 +68,23 @@ def fix_bools(json_str):
     """
     modified = False
     open_quotes = False
-    fixed_str = ''
+    fixed_str = ""
 
     i = 0
     while i < len(json_str):
         char = json_str[i]
 
         # Check if the current character is an opening or closing quote
-        if char == '"' and i > 0 and json_str[i-1] != "\\":
+        if char == '"' and i > 0 and json_str[i - 1] != "\\":
             open_quotes = not open_quotes
 
         # If not inside a string, check for "True" or "False" to replace
         if not open_quotes:
-            if json_str[i:i+4] == "True":
+            if json_str[i : i + 4] == "True":
                 fixed_str += "true"
                 modified = True
                 i += 3  # Skip the remaining characters of "True"
-            elif json_str[i:i+5] == "False":
+            elif json_str[i : i + 5] == "False":
                 fixed_str += "false"
                 modified = True
                 i += 4  # Skip the remaining characters of "False"

@@ -9,6 +9,7 @@ from gpt_json.tests.shared import MySchema
 def strip_whitespace(input_string: str):
     return sub(r"\s+", "", input_string)
 
+
 @pytest.mark.parametrize(
     "schema_definition,expected",
     [
@@ -24,7 +25,7 @@ def strip_whitespace(input_string: str):
                 }},
                 "reason": bool // Explanation
             }}
-            """
+            """,
         ),
         (
             list[MySchema],
@@ -40,9 +41,11 @@ def strip_whitespace(input_string: str):
             "reason": bool // Explanation
             }}, // Repeat for as many objects as are relevant
             ]
-            """
-        )
-    ]
+            """,
+        ),
+    ],
 )
 def test_generate_schema_prompt(schema_definition, expected: str):
-    assert strip_whitespace(generate_schema_prompt(schema_definition)) == strip_whitespace(expected)
+    assert strip_whitespace(
+        generate_schema_prompt(schema_definition)
+    ) == strip_whitespace(expected)
