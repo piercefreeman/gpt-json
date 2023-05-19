@@ -29,13 +29,21 @@ class GPTModelVersion(EnumSuper):
     GPT_4 = "gpt-4-0314"
 
 
+@unique
+class JsonFixEnum(EnumSuper):
+    UNCLOSED_OBJECT = "unclosed_object"
+    UNCLOSED_KEY = "unclosed_key"
+    UNCLOSED_VALUE = "unclosed_value"
+    MISSING_VALUE = "missing_value"
+
+
 @dataclass
 class FixTransforms:
     """
     How a gpt payload was modified to be valid
     """
 
-    fixed_truncation: bool = False
+    fixed_truncation: JsonFixEnum | None = None
     fixed_bools: bool = False
 
 

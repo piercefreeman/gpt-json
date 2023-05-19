@@ -25,7 +25,7 @@ Respond with the following JSON schema:
 
 async def runner():
     gpt_json = GPTJSON[SentimentSchema](API_KEY)
-    response = await gpt_json.run(
+    response, _ = await gpt_json.run(
         messages=[
             GPTMessage(
                 role=GPTMessageRole.SYSTEM,

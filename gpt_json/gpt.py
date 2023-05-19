@@ -2,7 +2,16 @@ import logging
 from dataclasses import replace
 from json import loads as json_loads
 from json.decoder import JSONDecodeError
-from typing import Any, Generic, List, Type, TypeVar, get_args, get_origin
+from typing import (
+    Any,
+    AsyncGenerator,
+    Generic,
+    List,
+    Type,
+    TypeVar,
+    get_args,
+    get_origin,
+)
 
 import backoff
 import openai
@@ -14,7 +23,13 @@ from tiktoken import encoding_for_model
 from gpt_json.models import FixTransforms, GPTMessage, GPTModelVersion, ResponseType
 from gpt_json.parsers import find_json_response
 from gpt_json.prompts import generate_schema_prompt
+from gpt_json.streaming import (
+    StreamingObject,
+    parse_streamed_json,
+    prepare_streaming_object,
+)
 from gpt_json.transformations import fix_bools, fix_truncated_json
+from gpt_json.types_oai import ChatCompletionChunk
 
 logger = logging.getLogger("gptjson_logger")
 handler = logging.StreamHandler()
@@ -161,6 +176,77 @@ class GPTJSON(Generic[SchemaType]):
         else:
             return self.schema_model(**extracted_json), fixed_payload
 
+    async def stream(
+        self,
+        messages: list[GPTMessage],
+        max_response_tokens: int | None = None,
+        format_variables: dict[str, Any] | None = None,
+    ) -> AsyncGenerator[StreamingObject[SchemaType], None]:
+        """
+        See `run` for documentation. This method is an async generator wrapper around `run` that streams partial results
+        instead of returning them all at once.
+
+        :return: yields `StreamingObject[SchemaType]`s.
+        """
+        if self.extract_type != ResponseType.DICTIONARY:
+            raise NotImplementedError(
+                "For now, streaming is only supported for dictionary responses."
+            )
+        for field_type in self.schema_model.__annotations__.values():
+            if field_type != str:
+                raise NotImplementedError(
+                    "For now, streaming is not supported for nested dictionary responses."
+                )
+
+        messages = [
+            self.fill_message_template(message, format_variables or {})
+            for message in messages
+        ]
+
+        # Most requests succeed on the first try but we wrap it locally here in case
+        # there is some temporarily instability with the API. If there are longer periods
+        # of instability, there should be system-wide retries in a daemon.
+        backoff_request_submission = backoff.on_exception(
+            backoff.expo,
+            (RateLimitError, OpenAITimeout, APIConnectionError),
+            max_tries=self.openai_max_retries,
+            on_backoff=handle_backoff,
+        )(self.submit_request)
+
+        raw_responses = await backoff_request_submission(
+            messages, max_response_tokens=max_response_tokens, stream=True
+        )
+
+        previous_partial = None
+        cumulative_response = ""
+        async for raw_response in raw_responses:
+            logger.debug(f"------- RAW RESPONSE ----------")
+            logger.debug(raw_response)
+            logger.debug(f"------- END RAW RESPONSE ----------")
+
+            response = ChatCompletionChunk(**raw_response)
+
+            if response.choices[0].delta.role is not None:
+                # Ignore assistant role message
+                continue
+            if response.choices[0].finish_reason is not None:
+                # Ignore finish message
+                continue
+
+            cumulative_response += response.choices[0].delta.content
+
+            partial_data, proposed_event = parse_streamed_json(cumulative_response)
+            partial_response = prepare_streaming_object(
+                self.schema_model, partial_data, previous_partial, proposed_event
+            )
+
+            if (
+                previous_partial is None
+                or previous_partial.partial_obj != partial_response.partial_obj
+            ):
+                yield partial_response
+                previous_partial = partial_response
+
     def extract_json(self, completion_response, extract_type: ResponseType):
         """
         Assumes one main block of results, either list of dictionary
@@ -200,6 +286,7 @@ class GPTJSON(Generic[SchemaType]):
         self,
         messages: list[GPTMessage],
         max_response_tokens: int | None,
+        stream: bool = False,
     ):
         logger.debug("------- START MESSAGE ----------")
         logger.debug(messages)
@@ -218,6 +305,7 @@ class GPTJSON(Generic[SchemaType]):
             temperature=self.temperature,
             timeout=self.timeout,
             api_key=self.api_key,
+            stream=stream,
             **optional_parameters,
             **self.openai_arguments,
         )
