@@ -184,3 +184,13 @@ Our focus is on making unit tests as robust as possible. The variability with GP
 A non-exhaustive list of other libraries that address the same problem. None of them were fully compatible with my deployment (hence this library), but check them out:
 
 [jsonformer](https://github.com/1rgs/jsonformer) - Works with any Huggingface model, whereas `gpt-json` is specifically tailored towards the GPT-X family. GPT doesn't output logit probabilities or allow fixed decoder templating so the same approach can't apply.
+
+## Formatting
+
+We use black and mypy for formatting. You can set up a pre-commit git hook to do this automatically via the `./lint.sh` helper file.
+
+If you perform a bulk reformatting to the codebase, you should add your most recent commit to the `.git-blame-ignore-revs` file and run:
+
+```
+git config blame.ignoreRevsFile .git-blame-ignore-revs
+```
