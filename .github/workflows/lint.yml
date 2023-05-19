@@ -1,7 +1,12 @@
 name: GPTJSON Lint
 
 on:
-  push
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
 
 jobs:
   run_lint:
@@ -20,8 +25,7 @@ jobs:
           python-version: ${{ matrix.python }}
 
       - name: Install poetry
-        run:
-          curl -sSL https://install.python-poetry.org | python3 -
+        run: curl -sSL https://install.python-poetry.org | python3 -
 
       - name: Install python dependencies
         run: |
