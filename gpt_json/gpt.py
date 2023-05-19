@@ -235,15 +235,9 @@ class GPTJSON(Generic[SchemaType]):
 
             cumulative_response += response.choices[0].delta.content or ""
 
-            # Unexpected but possible error if the schema has been unset
-            if self.schema_model is None:
-                raise ValueError(
-                    "GPTJSON failed to cast results into schema model. self.schema_model was unset."
-                )
-
             partial_data, proposed_event = parse_streamed_json(cumulative_response)
             partial_response: StreamingObject[SchemaType] = prepare_streaming_object(
-                self.schema_model, partial_data, previous_partial, proposed_event  # type: ignore
+                self.schema_model, partial_data, previous_partial, proposed_event
             )
 
             if (
