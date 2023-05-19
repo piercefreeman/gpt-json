@@ -39,14 +39,6 @@ def _is_missing_dict_value(stack, fixed_str, open_quotes, last_seen_comma_or_col
     just_closed_dict_key = inside_dict and not open_quotes and fixed_str.strip()[-1] == '"'
     just_closed_dict_value = inside_dict and not open_quotes and fixed_str.strip()[-1] == '"' and last_seen_comma_or_colon == ":"
     missing_dict_value = (inside_dict_key or just_before_dict_value or just_closed_dict_key) and not just_closed_dict_value
-    print("missing_dict_value", missing_dict_value)
-    print("inside_dict", inside_dict)
-    print("inside_dict_key", inside_dict_key)
-    print("open_quotes", open_quotes)
-    print("last_seen_comma_or_colon", last_seen_comma_or_colon)
-    print("just_before_dict_value", just_before_dict_value)
-    print("just_closed_dict_key", just_closed_dict_key)
-    print("fixed_str", f"'{fixed_str}'")
     return missing_dict_value
 
 def is_truncated(json_str):
@@ -95,10 +87,6 @@ def fix_truncated_json(json_str) -> tuple[str, JsonFixEnum | None]:
         # of the current nested level
         close_stack = ["]" if char == "[" else "}" for char in stack]
         fixed_str += ''.join(close_stack[::-1])
-    
-    print("fixed_str", f"'{fixed_str}'")
-    print("stack", stack)
-    print("open_quotes", open_quotes)
     
     # if the fixed string is valid JSON, return it
     fix = JsonFixEnum.UNCLOSED_OBJECT

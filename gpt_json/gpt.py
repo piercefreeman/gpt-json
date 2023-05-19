@@ -228,9 +228,7 @@ class GPTJSON(Generic[SchemaType]):
         # Save the original response before we start modifying it
         fixed_response = extracted_response
         fixed_response, fixed_truncation = fix_truncated_json(fixed_response)
-        print("pre bools", f"'{fixed_response}'")
         fixed_response, fixed_bools = fix_bools(fixed_response)
-        print("post bools", f"'{fixed_response}'")
 
         fixed_payload = FixTransforms(
             fixed_bools=fixed_bools,
