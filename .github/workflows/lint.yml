@@ -2,6 +2,9 @@ name: GPTJSON Lint
 
 on:
   push
+  pull_request:
+    branches:
+      - main
 
 jobs:
   run_lint:
