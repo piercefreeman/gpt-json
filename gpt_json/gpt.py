@@ -197,8 +197,6 @@ class GPTJSON(Generic[SchemaType]):
                 raise NotImplementedError(
                     "For now, streaming is not supported for nested dictionary responses."
                 )
-        if self.schema_model is None:
-            return
 
         messages = [
             self.fill_message_template(message, format_variables or {})
