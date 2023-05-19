@@ -8,6 +8,7 @@ from gpt_json.gpt import GPTJSON
 from gpt_json.models import (FixTransforms, GPTMessage, GPTMessageRole,
                              GPTModelVersion)
 from gpt_json.tests.shared import MySchema, MySubSchema
+from gpt_json.transformations import JsonFixEnum
 
 
 def test_throws_error_if_no_model_specified():
@@ -116,7 +117,7 @@ def test_cast_message_to_gpt_format(role_type: GPTMessageRole, expected: str):
                 ),
                 reason=True,
             ),
-            FixTransforms(fixed_bools=True, fixed_truncation=True),
+            FixTransforms(fixed_bools=True, fixed_truncation=JsonFixEnum.UNCLOSED_VALUE),
         ),
     ]
 )
@@ -173,6 +174,7 @@ async def test_acreate(schema_typehint, response_raw, parsed, expected_transform
             temperature=0.0,
             timeout=60,
             api_key=None,
+            stream=False
         )
 
     assert response == parsed

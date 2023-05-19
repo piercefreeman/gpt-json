@@ -7,21 +7,47 @@ def build_stack(json_str):
     fixed_str = ''
     open_quotes = False
 
+    # inside a dictionary, whether we've seen a comma or colon most recently
+    last_seen_comma_or_colon = None 
+
     for i, char in enumerate(json_str):
         if not open_quotes:
             # opening a new nested
             if char in "{[":
                 stack.append(char)
+                last_seen_comma_or_colon = None
             # closing a nested
             elif char in "}]":
                 stack.pop()
+                last_seen_comma_or_colon = None
+            if char in ",:":
+                last_seen_comma_or_colon = char
         # opening or closing a string, only it's not escaped
         if char == '"' and i > 0 and json_str[i-1] != "\\":
             open_quotes = not open_quotes
 
         fixed_str += char
+
     
-    return (stack, fixed_str, open_quotes)
+    return (stack, fixed_str, open_quotes, last_seen_comma_or_colon)
+
+def _is_missing_dict_value(stack, fixed_str, open_quotes, last_seen_comma_or_colon):
+    # check if we're missing a dict value in the json string 
+    inside_dict = len(stack) > 0 and stack[-1] == "{"
+    inside_dict_key = inside_dict and open_quotes and last_seen_comma_or_colon != ":"
+    just_before_dict_value = inside_dict and not open_quotes and last_seen_comma_or_colon == ":"
+    just_closed_dict_key = inside_dict and not open_quotes and fixed_str.strip()[-1] == '"'
+    just_closed_dict_value = inside_dict and not open_quotes and fixed_str.strip()[-1] == '"' and last_seen_comma_or_colon == ":"
+    missing_dict_value = (inside_dict_key or just_before_dict_value or just_closed_dict_key) and not just_closed_dict_value
+    print("missing_dict_value", missing_dict_value)
+    print("inside_dict", inside_dict)
+    print("inside_dict_key", inside_dict_key)
+    print("open_quotes", open_quotes)
+    print("last_seen_comma_or_colon", last_seen_comma_or_colon)
+    print("just_before_dict_value", just_before_dict_value)
+    print("just_closed_dict_key", just_closed_dict_key)
+    print("fixed_str", f"'{fixed_str}'")
+    return missing_dict_value
 
 def is_truncated(json_str):
     """
@@ -29,7 +55,7 @@ def is_truncated(json_str):
     brackets is greater than the number of closing brackets.
 
     """
-    stack, _, _ = build_stack(json_str)
+    stack, _, _, _ = build_stack(json_str)
     return len(stack) > 0
 
 class JsonFixEnum(Enum):
@@ -45,7 +71,8 @@ def fix_truncated_json(json_str) -> tuple[str, JsonFixEnum | None]:
 
     Returns a tuple of (fixed_json_string, fix_type)
     """
-    stack, fixed_str, open_quotes = build_stack(json_str)
+    stack, fixed_str, open_quotes, last_seen_colon_or_comma = build_stack(json_str)
+    missing_value = _is_missing_dict_value(stack, fixed_str, open_quotes, last_seen_colon_or_comma)
     is_truncated = len(stack) > 0
     if not is_truncated:
         return json_str, None
@@ -53,37 +80,34 @@ def fix_truncated_json(json_str) -> tuple[str, JsonFixEnum | None]:
     fixed_str = fixed_str.strip()
 
     # propose null cases to handle missing values in truncated JSON string
-    proposed_fixed_strs = [fixed_str, fixed_str + ' null']
     if open_quotes:
-        proposed_fixed_strs = [fixed_str + '"', fixed_str + '": null']
+        fixed_str += '"'
+    if missing_value:
+        fixed_str = fixed_str.rstrip(":") + ": null"
 
-    for idx, fixed_str in enumerate(proposed_fixed_strs):
-        is_null_case = idx == 1
-        
-        # Ensure we don't have trailing commas
-        fixed_str = fixed_str.strip().rstrip(",")
+    # Ensure we don't have trailing commas
+    fixed_str = fixed_str.strip().rstrip(",")
 
-        # If we still have nested items remaining in our stack,
-        # unwind it into the fixed string
-        if stack:
-            # Unwind the stack by filling it with the closing character
-            # of the current nested level
-            close_stack = ["]" if char == "[" else "}" for char in stack]
-            fixed_str += ''.join(close_stack[::-1])
-        
-        # if the fixed string is valid JSON, return it
-        fix = JsonFixEnum.UNCLOSED_OBJECT
-        if open_quotes:
-            fix = JsonFixEnum.UNCLOSED_KEY if is_null_case else JsonFixEnum.UNCLOSED_VALUE
-        elif is_null_case:
-            fix = JsonFixEnum.MISSING_VALUE
-        try:
-            json.loads(fixed_str)
-            return fixed_str, fix
-        except json.decoder.JSONDecodeError:
-            pass
+    # If we still have nested items remaining in our stack,
+    # unwind it into the fixed string
+    if stack:
+        # Unwind the stack by filling it with the closing character
+        # of the current nested level
+        close_stack = ["]" if char == "[" else "}" for char in stack]
+        fixed_str += ''.join(close_stack[::-1])
+    
+    print("fixed_str", f"'{fixed_str}'")
+    print("stack", stack)
+    print("open_quotes", open_quotes)
+    
+    # if the fixed string is valid JSON, return it
+    fix = JsonFixEnum.UNCLOSED_OBJECT
+    if open_quotes:
+        fix = JsonFixEnum.UNCLOSED_KEY if missing_value else JsonFixEnum.UNCLOSED_VALUE
+    elif missing_value:
+        fix = JsonFixEnum.MISSING_VALUE
 
-    raise ValueError("Unable to fix truncated JSON string")
+    return fixed_str, fix
 
 
 def fix_bools(json_str):

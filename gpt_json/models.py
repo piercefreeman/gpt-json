@@ -1,6 +1,8 @@
 from dataclasses import dataclass
 from enum import Enum, unique
 
+from gpt_json.transformations import JsonFixEnum
+
 
 @unique
 class ResponseType(Enum):
@@ -26,7 +28,7 @@ class FixTransforms:
     """
     How a gpt payload was modified to be valid
     """
-    fixed_truncation: bool = False
+    fixed_truncation: JsonFixEnum | None = None
     fixed_bools: bool = False
 
 
