@@ -53,15 +53,17 @@ async def main():
         if partial_teacher.event == StreamEventEnum.OBJECT_CREATED:
             continue
 
+        # print a heading when we see a new key
         if partial_teacher.event == StreamEventEnum.KEY_UPDATED and partial_teacher.updated_key not in seen_keys:
-            key_readable = {
-            "student_model": "Thought: ",
-            "tutor_response": "Response to student: "
-            }[partial_teacher.updated_key]
-            print(key_readable, end="")
+            if partial_teacher.updated_key == "student_model":
+                print("Thought: ", end="")
+            elif partial_teacher.updated_key == "tutor_response":
+                print("Response to student: ", end="")
             seen_keys.add(partial_teacher.updated_key)
         
         print(partial_teacher.value_change, end="")
+ 
+        # print a newline when we see a key has been completed
         if partial_teacher.event == StreamEventEnum.KEY_COMPLETED:
             print()
         sys.stdout.flush()

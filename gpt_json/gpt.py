@@ -182,7 +182,7 @@ class GPTJSON(Generic[SchemaType]):
 
         raw_responses = await backoff_request_submission(messages, max_response_tokens=max_response_tokens, stream=True)
 
-        prev_partial = None
+        previous_partial = None
         cumulative_response = ""
         async for raw_response in raw_responses:
             logger.debug(f"------- RAW RESPONSE ----------")
@@ -200,12 +200,12 @@ class GPTJSON(Generic[SchemaType]):
             
             cumulative_response += response.choices[0].delta.content
             
-            partial_data, event = parse_streamed_json(cumulative_response)
-            partial_response = prepare_streaming_object(self.schema_model, partial_data, prev_partial, event)
+            partial_data, proposed_event = parse_streamed_json(cumulative_response)
+            partial_response = prepare_streaming_object(self.schema_model, partial_data, previous_partial, proposed_event)
 
-            if prev_partial is None or prev_partial.partial_obj != partial_response.partial_obj:
+            if previous_partial is None or previous_partial.partial_obj != partial_response.partial_obj:
                 yield partial_response
-                prev_partial = partial_response
+                previous_partial = partial_response
             
         
     def extract_json(self, completion_response, extract_type: ResponseType):

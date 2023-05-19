@@ -2,8 +2,9 @@ import asyncio
 from os import getenv
 
 from dotenv import load_dotenv
-from gpt_json import GPTJSON, GPTMessage, GPTMessageRole
 from pydantic import BaseModel, Field
+
+from gpt_json import GPTJSON, GPTMessage, GPTMessageRole
 
 load_dotenv()
 API_KEY = getenv("OPENAI_API_KEY")

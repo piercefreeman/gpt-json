@@ -29,11 +29,32 @@ class StreamingObject(Generic[SchemaType]):
     new_cls = super().__class_getitem__(item)
     new_cls.schema_model = item
     return new_cls
+   
+def _create_schema_from_partial(schema_model: SchemaType, partial: dict[str, Any]):
+   """Creates a pydantic model from a dictionary that only partially defines model values.
+   Only supports string field types for now.
+   
+   TODO: this is hacky. ideally we want pydantic to implement Partial[SchemaType]
+   https://github.com/pydantic/pydantic/issues/1673
+   my fix is to create the schema object with all string values for now"""
+   cleaned_obj_data = {field: "" for field, typ in schema_model.__fields__.items()}
+   cleaned_obj_data.update({k:v for k,v in partial.items() if v is not None})
+   return schema_model(**cleaned_obj_data)
 
 
-def prepare_streaming_object(schema_model: SchemaType, curr_partial_raw: dict[str, Any], prev_partial: 'StreamingObject[SchemaType]', proposed_event: StreamEventEnum) -> StreamingObject[SchemaType]:
+def prepare_streaming_object(schema_model: SchemaType, current_partial_raw: dict[str, Any], previous_partial: StreamingObject[SchemaType], proposed_event: StreamEventEnum) -> StreamingObject[SchemaType]:
+   """Prepares a StreamingObject for the next iteration of the stream generator
+
+   :param schema_model: The pydantic model for the full schema being streamed
+   :param current_partial_raw: The "raw" JSON object parsed after fixing the partially streamed JSON string
+   :param previous_partial: The previous StreamingObject returned by the stream generator
+   :param proposed_event: The streaming event "proposed" while fixing the partially streamed JSON string. 
+   NOTE: this is not necessarily the "official" event returned by this function in the StreamingObject.
+
+   :return: StreamingObject[SchemaType]. 
+   """
    # compute which key was most recently updated 
-   raw_recent_key = list(curr_partial_raw.keys())[-1] if curr_partial_raw else None
+   raw_recent_key = list(current_partial_raw.keys())[-1] if current_partial_raw else None
    updated_key = raw_recent_key if raw_recent_key in schema_model.__fields__ else None
    
    event = proposed_event
@@ -41,19 +62,14 @@ def prepare_streaming_object(schema_model: SchemaType, curr_partial_raw: dict[st
       # when the updated key is None, we haven't fully streamed the object's first key yet 
       event = StreamEventEnum.AWAITING_FIRST_KEY
    
-   # TODO: this is hacky. ideally we want pydantic to implement Partial[SchemaType]
-   # https://github.com/pydantic/pydantic/issues/1673
-   # my fix is to create the schema object with all string values for now
-   cleaned_obj_data = {field: "" for field, typ in schema_model.__fields__.items()}
-   cleaned_obj_data.update({k:v for k,v in curr_partial_raw.items() if v is not None})
-   partial_obj = schema_model(**cleaned_obj_data)
+   partial_obj = _create_schema_from_partial(schema_model, current_partial_raw)
 
    # compute value update if relevant
    value_change = None
    if event in [StreamEventEnum.KEY_UPDATED, StreamEventEnum.KEY_COMPLETED]:
-      prev_value = prev_partial.partial_obj.dict()[updated_key]
+      prev_value = previous_partial.partial_obj.dict()[updated_key]
       curr_value = partial_obj.dict()[updated_key]
-      if type(prev_value) == str and type(curr_value) == str:
+      if isinstance(prev_value, str) and isinstance(curr_value, str):
          value_change = curr_value.replace(prev_value, "")
       else:
          value_change = curr_value
