@@ -1,7 +1,12 @@
-import pytest
-import gpt_json.models as models_file   
-from json import loads as json_loads, dumps as json_dumps
+import sys
 from enum import Enum
+from json import dumps as json_dumps
+from json import loads as json_loads
+
+import pytest
+
+import gpt_json.models as models_file
+
 
 @pytest.mark.parametrize("model_file", [models_file])
 def test_serializable_enums(model_file):
@@ -9,6 +14,10 @@ def test_serializable_enums(model_file):
     All our enums should be serializable as JSON
 
     """
+    if sys.version_info[1] < 11:
+        pytest.skip("Only Python 3.11+ has native support for serializing enums")
+        return
+
     found_enums = 0
     for obj in model_file.__dict__.values():
         if isinstance(obj, type) and issubclass(obj, Enum):
