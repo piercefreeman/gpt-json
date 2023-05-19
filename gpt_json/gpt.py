@@ -288,8 +288,7 @@ class GPTJSON(Generic[SchemaType]):
         # Log a copy of the message array if we have to crop it
         if current_token_count != original_token_count:
             logger.debug(
-                f"Trimmed message from {original_token_count} to {current_token_count} tokens",
-                new_messages,
+                f"Trimmed message from {original_token_count} to {current_token_count} tokens: {new_messages}",
             )
         else:
             logger.debug(f"Skipping trim ({original_token_count}) ({current_token_count})")
