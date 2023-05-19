@@ -271,7 +271,7 @@ async def test_extracted_json_is_None():
         "submit_request",
         return_value={"choices": [{"message": {"content": "some content"}}]},
     ), patch.object(
-        gpt, "extract_json", return_value=(None, FixTransforms(False, False))
+        gpt, "extract_json", return_value=(None, FixTransforms(None, False))
     ):
         result, _ = await gpt.run(
             [GPTMessage(GPTMessageRole.SYSTEM, "message content")]
@@ -299,7 +299,7 @@ async def test_unable_to_find_valid_json_payload():
         "submit_request",
         return_value={"choices": [{"message": {"content": "some content"}}]},
     ), patch.object(
-        gpt, "extract_json", return_value=(None, FixTransforms(False, False))
+        gpt, "extract_json", return_value=(None, FixTransforms(None, False))
     ):
         result, _ = await gpt.run(
             [GPTMessage(GPTMessageRole.SYSTEM, "message content")]

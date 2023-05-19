@@ -1,9 +1,9 @@
 import json
 from dataclasses import dataclass
 from enum import Enum
-from typing import Any, Generic, Optional, Type, TypeVar
+from typing import Any, Generic, Type, TypeVar
 
-from pydantic import BaseModel, create_model
+from pydantic import BaseModel
 
 from gpt_json.transformations import JsonFixEnum, fix_truncated_json
 
@@ -24,15 +24,16 @@ class StreamingObject(Generic[SchemaType]):
     event: StreamEventEnum
     partial_obj: SchemaType
 
-    schema_model: Type[SchemaType] = None
+    schema_model: Type[SchemaType] | None = None
 
     def __class_getitem__(cls, item):
-        new_cls = super().__class_getitem__(item)
-        new_cls.schema_model = item
-        return new_cls
+        cls.schema_model = item
+        return cls
 
 
-def _create_schema_from_partial(schema_model: SchemaType, partial: dict[str, Any]):
+def _create_schema_from_partial(
+    schema_model: Type[SchemaType], partial: dict[str, Any]
+):
     """Creates a pydantic model from a dictionary that only partially defines model values.
     Only supports string field types for now.
 
@@ -45,9 +46,9 @@ def _create_schema_from_partial(schema_model: SchemaType, partial: dict[str, Any
 
 
 def prepare_streaming_object(
-    schema_model: SchemaType,
+    schema_model: Type[SchemaType],
     current_partial_raw: dict[str, Any],
-    previous_partial: StreamingObject[SchemaType],
+    previous_partial: StreamingObject[SchemaType] | None,
     proposed_event: StreamEventEnum,
 ) -> StreamingObject[SchemaType]:
     """Prepares a StreamingObject for the next iteration of the stream generator
@@ -76,14 +77,18 @@ def prepare_streaming_object(
     # compute value update if relevant
     value_change = None
     if event in [StreamEventEnum.KEY_UPDATED, StreamEventEnum.KEY_COMPLETED]:
-        prev_value = previous_partial.partial_obj.dict()[updated_key]
-        curr_value = partial_obj.dict()[updated_key]
+        prev_value = (
+            previous_partial.partial_obj.dict()[updated_key]
+            if previous_partial is not None and updated_key is not None
+            else ""
+        )
+        curr_value = partial_obj.dict().get(updated_key, "")
         if isinstance(prev_value, str) and isinstance(curr_value, str):
             value_change = curr_value.replace(prev_value, "")
         else:
             value_change = curr_value
 
-    return StreamingObject[schema_model](
+    return StreamingObject[SchemaType](
         value_change=value_change,
         updated_key=updated_key,
         event=event,

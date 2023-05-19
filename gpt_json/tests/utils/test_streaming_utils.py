@@ -1,13 +1,8 @@
-import json
-
 import pytest
 from pydantic import BaseModel
 
 from gpt_json.streaming import StreamEventEnum
-from gpt_json.tests.utils.streaming_utils import (
-    ExpectedPartialObjectStreamHarness,
-    tokenize,
-)
+from gpt_json.tests.utils.streaming_utils import ExpectedPartialObjectStreamHarness
 
 
 class ExampleStrDictSchema(BaseModel):
