@@ -2,7 +2,7 @@ import sys
 from dataclasses import dataclass
 from enum import Enum, unique
 
-if sys.version_info[1] > 11:
+if sys.version_info >= (3, 11):
     from enum import StrEnum
 
     EnumSuper = StrEnum
