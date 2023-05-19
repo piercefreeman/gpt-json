@@ -7,7 +7,8 @@ def build_stack(json_str):
     fixed_str = ''
     open_quotes = False
 
-    # inside a dictionary, whether we've seen a comma or colon most recently
+    # a flag indicating whether we've seen a comma or colon most recently
+    # since last opening/closing a dict or list
     last_seen_comma_or_colon = None 
 
     for i, char in enumerate(json_str):
