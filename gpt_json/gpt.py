@@ -17,7 +17,7 @@ from gpt_json.parsers import find_json_response
 from gpt_json.prompts import generate_schema_prompt
 from gpt_json.transformations import fix_bools, fix_truncated_json
 
-logger = logging.getLogger('jsongpt_logger')
+logger = logging.getLogger('gptjson_logger')
 handler = logging.StreamHandler()
 formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 handler.setFormatter(formatter)
