@@ -9,17 +9,46 @@ from gpt_json.models import GPTMessage, GPTMessageRole, GPTModelVersion
 from gpt_json.streaming import StreamingObject
 from gpt_json.tests.utils.streaming_utils import tokenize
 from gpt_json.tests.utils.test_streaming_utils import (
-    EXAMPLE_DICT, EXAMPLE_DICT_STREAM_DATA, EXAMPLE_MULTI_NESTED,
-    EXAMPLE_MULTI_NESTED_STREAM_DATA, EXAMPLE_STR_DICT,
-    EXAMPLE_STR_DICT_STREAM_DATA, EXAMPLE_STR_LIST,
-    EXAMPLE_STR_LIST_STREAM_DATA, ExampleDictSchema, ExampleMultiNestedSchema,
-    ExampleStrDictSchema, ExampleStrListSchema)
+    EXAMPLE_DICT,
+    EXAMPLE_DICT_STREAM_DATA,
+    EXAMPLE_MULTI_NESTED,
+    EXAMPLE_MULTI_NESTED_STREAM_DATA,
+    EXAMPLE_STR_DICT,
+    EXAMPLE_STR_DICT_STREAM_DATA,
+    EXAMPLE_STR_LIST,
+    EXAMPLE_STR_LIST_STREAM_DATA,
+    ExampleDictSchema,
+    ExampleMultiNestedSchema,
+    ExampleStrDictSchema,
+    ExampleStrListSchema,
+)
 
-MOCK_ASSISTANT_CHUNK = {"id": "chatcmpl-7GWTw9HlmVFOiXyWNBfNKVFzA55yy", "object": "chat.completion.chunk", "created": 1684172464, "model": "gpt-4-0314", "choices": [{"delta": {"role": "assistant"}, "index": 0, "finish_reason": None}]}
-MOCK_FINISH_REASON_CHUNK = {"id": "chatcmpl-7GWTw9HlmVFOiXyWNBfNKVFzA55yy", "object": "chat.completion.chunk", "created": 1684172464, "model": "gpt-4-0314", "choices": [{"delta": {}, "index": 0, "finish_reason": "stop" }]}
-MOCK_CONTENT_CHUNK = lambda content: {"id": "chatcmpl-7GWTw9HlmVFOiXyWNBfNKVFzA55yy", "object": "chat.completion.chunk", "created": 1684172464, "model": "gpt-4-0314", "choices": [{"delta": {"content": content}, "index": 0, "finish_reason": None}]}
+MOCK_ASSISTANT_CHUNK = {
+    "id": "chatcmpl-7GWTw9HlmVFOiXyWNBfNKVFzA55yy",
+    "object": "chat.completion.chunk",
+    "created": 1684172464,
+    "model": "gpt-4-0314",
+    "choices": [{"delta": {"role": "assistant"}, "index": 0, "finish_reason": None}],
+}
+MOCK_FINISH_REASON_CHUNK = {
+    "id": "chatcmpl-7GWTw9HlmVFOiXyWNBfNKVFzA55yy",
+    "object": "chat.completion.chunk",
+    "created": 1684172464,
+    "model": "gpt-4-0314",
+    "choices": [{"delta": {}, "index": 0, "finish_reason": "stop"}],
+}
+MOCK_CONTENT_CHUNK = lambda content: {
+    "id": "chatcmpl-7GWTw9HlmVFOiXyWNBfNKVFzA55yy",
+    "object": "chat.completion.chunk",
+    "created": 1684172464,
+    "model": "gpt-4-0314",
+    "choices": [{"delta": {"content": content}, "index": 0, "finish_reason": None}],
+}
 
-def _mock_oai_streaming_chunks(full_object, json_indent_level=2, prefix_str=None, postfix_str=None):
+
+def _mock_oai_streaming_chunks(
+    full_object, json_indent_level=2, prefix_str=None, postfix_str=None
+):
     yield MOCK_ASSISTANT_CHUNK
 
     full_content = f"{prefix_str if prefix_str else ''}{json.dumps(full_object, indent=json_indent_level)}{postfix_str if postfix_str else ''}"
@@ -27,8 +56,9 @@ def _mock_oai_streaming_chunks(full_object, json_indent_level=2, prefix_str=None
 
     for token in full_content_tokens:
         yield MOCK_CONTENT_CHUNK(token)
-    
+
     yield MOCK_FINISH_REASON_CHUNK
+
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
@@ -38,10 +68,17 @@ def _mock_oai_streaming_chunks(full_object, json_indent_level=2, prefix_str=None
         # TODO: support these cases in v1
         (EXAMPLE_DICT, ExampleDictSchema, EXAMPLE_DICT_STREAM_DATA, False),
         (EXAMPLE_STR_LIST, ExampleStrListSchema, EXAMPLE_STR_LIST_STREAM_DATA, False),
-        (EXAMPLE_MULTI_NESTED, ExampleMultiNestedSchema, EXAMPLE_MULTI_NESTED_STREAM_DATA, False)
-    ]
+        (
+            EXAMPLE_MULTI_NESTED,
+            ExampleMultiNestedSchema,
+            EXAMPLE_MULTI_NESTED_STREAM_DATA,
+            False,
+        ),
+    ],
 )
-async def test_gpt_stream(full_object, schema_typehint, expected_stream_data, should_support):
+async def test_gpt_stream(
+    full_object, schema_typehint, expected_stream_data, should_support
+):
     model_version = GPTModelVersion.GPT_3_5
     messages = [
         GPTMessage(
@@ -59,9 +96,11 @@ async def test_gpt_stream(full_object, schema_typehint, expected_stream_data, sh
 
     # Define mock response
     mocked_oai_raw_responses = _mock_oai_streaming_chunks(full_object)
+
     async def async_list_to_generator(my_list):
         for item in my_list:
             yield item
+
     mock_response = async_list_to_generator(mocked_oai_raw_responses)
 
     # Create the mock
@@ -71,7 +110,9 @@ async def test_gpt_stream(full_object, schema_typehint, expected_stream_data, sh
 
         if not should_support:
             with pytest.raises(NotImplementedError):
-                streaming_objects = [obj async for obj in model.stream(messages=messages)]
+                streaming_objects = [
+                    obj async for obj in model.stream(messages=messages)
+                ]
             return True
 
         # Call the function and pass the expected parameters
@@ -79,8 +120,18 @@ async def test_gpt_stream(full_object, schema_typehint, expected_stream_data, sh
 
         idx = 0
         async for stream_obj in streaming_objects:
-            expected_partial_obj, expected_event, expected_update_key, expected_value_change = expected_stream_data[idx]
-            expected_obj = StreamingObject[schema_typehint](partial_obj=schema_typehint(**expected_partial_obj), event=expected_event, updated_key=expected_update_key, value_change=expected_value_change)
+            (
+                expected_partial_obj,
+                expected_event,
+                expected_update_key,
+                expected_value_change,
+            ) = expected_stream_data[idx]
+            expected_obj = StreamingObject[schema_typehint](
+                partial_obj=schema_typehint(**expected_partial_obj),
+                event=expected_event,
+                updated_key=expected_update_key,
+                value_change=expected_value_change,
+            )
             assert stream_obj == expected_obj
 
             idx += 1
@@ -100,5 +151,3 @@ async def test_gpt_stream(full_object, schema_typehint, expected_stream_data, sh
             stream=True,
             api_key=None,
         )
-        
-

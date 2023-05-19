@@ -7,10 +7,12 @@ class ChatCompletionDelta(BaseModel):
     content: str | None
     role: str | None
 
+
 class ChatCompletionChunkChoice(BaseModel):
-    delta: ChatCompletionDelta 
+    delta: ChatCompletionDelta
     finish_reason: str | None
     index: int
+
 
 class ChatCompletionChunk(BaseModel):
     choices: list[ChatCompletionChunkChoice]

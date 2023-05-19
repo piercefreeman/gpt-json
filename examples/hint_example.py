@@ -9,8 +9,10 @@ from gpt_json import GPTJSON, GPTMessage, GPTMessageRole
 load_dotenv()
 API_KEY = getenv("OPENAI_API_KEY")
 
+
 class SentimentSchema(BaseModel):
     sentiment: int = Field(description="Either -1, 0, or 1.")
+
 
 SYSTEM_PROMPT = """
 Analyze the sentiment of the given text.
@@ -19,6 +21,7 @@ Respond with the following JSON schema:
 
 {json_schema}
 """
+
 
 async def runner():
     gpt_json = GPTJSON[SentimentSchema](API_KEY)
@@ -31,10 +34,11 @@ async def runner():
             GPTMessage(
                 role=GPTMessageRole.USER,
                 content="Text: I love this product. It's the best thing ever!",
-            )
+            ),
         ]
     )
     print(response)
     print(f"Detected sentiment: {response.sentiment}")
+
 
 asyncio.run(runner())

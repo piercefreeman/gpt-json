@@ -1,15 +1,14 @@
-import json
-from enum import Enum
+from gpt_json.models import JsonFixEnum
 
 
 def build_stack(json_str):
     stack = []
-    fixed_str = ''
+    fixed_str = ""
     open_quotes = False
 
     # a flag indicating whether we've seen a comma or colon most recently
     # since last opening/closing a dict or list
-    last_seen_comma_or_colon = None 
+    last_seen_comma_or_colon = None
 
     for i, char in enumerate(json_str):
         if not open_quotes:
@@ -24,23 +23,35 @@ def build_stack(json_str):
             if char in ",:":
                 last_seen_comma_or_colon = char
         # opening or closing a string, only it's not escaped
-        if char == '"' and i > 0 and json_str[i-1] != "\\":
+        if char == '"' and i > 0 and json_str[i - 1] != "\\":
             open_quotes = not open_quotes
 
         fixed_str += char
 
-    
     return (stack, fixed_str, open_quotes, last_seen_comma_or_colon)
 
+
 def _is_missing_dict_value(stack, fixed_str, open_quotes, last_seen_comma_or_colon):
-    # check if we're missing a dict value in the json string 
+    # check if we're missing a dict value in the json string
     inside_dict = len(stack) > 0 and stack[-1] == "{"
     inside_dict_key = inside_dict and open_quotes and last_seen_comma_or_colon != ":"
-    just_before_dict_value = inside_dict and not open_quotes and last_seen_comma_or_colon == ":"
-    just_closed_dict_key = inside_dict and not open_quotes and fixed_str.strip()[-1] == '"'
-    just_closed_dict_value = inside_dict and not open_quotes and fixed_str.strip()[-1] == '"' and last_seen_comma_or_colon == ":"
-    missing_dict_value = (inside_dict_key or just_before_dict_value or just_closed_dict_key) and not just_closed_dict_value
+    just_before_dict_value = (
+        inside_dict and not open_quotes and last_seen_comma_or_colon == ":"
+    )
+    just_closed_dict_key = (
+        inside_dict and not open_quotes and fixed_str.strip()[-1] == '"'
+    )
+    just_closed_dict_value = (
+        inside_dict
+        and not open_quotes
+        and fixed_str.strip()[-1] == '"'
+        and last_seen_comma_or_colon == ":"
+    )
+    missing_dict_value = (
+        inside_dict_key or just_before_dict_value or just_closed_dict_key
+    ) and not just_closed_dict_value
     return missing_dict_value
+
 
 def is_truncated(json_str):
     """
@@ -51,11 +62,6 @@ def is_truncated(json_str):
     stack, _, _, _ = build_stack(json_str)
     return len(stack) > 0
 
-class JsonFixEnum(Enum):
-    UNCLOSED_OBJECT = "unclosed_object"
-    UNCLOSED_KEY = "unclosed_key"
-    UNCLOSED_VALUE = "unclosed_value"
-    MISSING_VALUE = "missing_value"
 
 def fix_truncated_json(json_str) -> tuple[str, JsonFixEnum | None]:
     """
@@ -65,7 +71,9 @@ def fix_truncated_json(json_str) -> tuple[str, JsonFixEnum | None]:
     Returns a tuple of (fixed_json_string, fix_type)
     """
     stack, fixed_str, open_quotes, last_seen_colon_or_comma = build_stack(json_str)
-    missing_value = _is_missing_dict_value(stack, fixed_str, open_quotes, last_seen_colon_or_comma)
+    missing_value = _is_missing_dict_value(
+        stack, fixed_str, open_quotes, last_seen_colon_or_comma
+    )
     is_truncated = len(stack) > 0
     if not is_truncated:
         return json_str, None
@@ -87,8 +95,8 @@ def fix_truncated_json(json_str) -> tuple[str, JsonFixEnum | None]:
         # Unwind the stack by filling it with the closing character
         # of the current nested level
         close_stack = ["]" if char == "[" else "}" for char in stack]
-        fixed_str += ''.join(close_stack[::-1])
-    
+        fixed_str += "".join(close_stack[::-1])
+
     # if the fixed string is valid JSON, return it
     fix = JsonFixEnum.UNCLOSED_OBJECT
     if open_quotes:
@@ -107,23 +115,23 @@ def fix_bools(json_str):
     """
     modified = False
     open_quotes = False
-    fixed_str = ''
+    fixed_str = ""
 
     i = 0
     while i < len(json_str):
         char = json_str[i]
 
         # Check if the current character is an opening or closing quote
-        if char == '"' and i > 0 and json_str[i-1] != "\\":
+        if char == '"' and i > 0 and json_str[i - 1] != "\\":
             open_quotes = not open_quotes
 
         # If not inside a string, check for "True" or "False" to replace
         if not open_quotes:
-            if json_str[i:i+4] == "True":
+            if json_str[i : i + 4] == "True":
                 fixed_str += "true"
                 modified = True
                 i += 3  # Skip the remaining characters of "True"
-            elif json_str[i:i+5] == "False":
+            elif json_str[i : i + 5] == "False":
                 fixed_str += "false"
                 modified = True
                 i += 4  # Skip the remaining characters of "False"

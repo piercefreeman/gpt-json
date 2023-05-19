@@ -1,4 +1,3 @@
-
 from typing import Any
 
 import tiktoken
@@ -7,8 +6,10 @@ from gpt_json.streaming import StreamEventEnum
 
 enc = tiktoken.get_encoding("cl100k_base")
 
+
 def tokenize(text):
     return [enc.decode([tok]) for tok in enc.encode(text)]
+
 
 def _tuple_merge(t1, t2):
     t1 = (t1,) if not isinstance(t1, tuple) else t1
@@ -16,10 +17,12 @@ def _tuple_merge(t1, t2):
 
     return t1 + t2
 
+
 class ExpectedPartialObjectStreamHarness:
     """Calling this  class implements the semantics of the behavior we expect from GPTJSON.stream().
-    It is only used for testing and demonstrative purposes. 
+    It is only used for testing and demonstrative purposes.
     """
+
     def __call__(self, full_obj: Any):
         if isinstance(full_obj, list):
             yield from self.handle_list(full_obj)
@@ -42,19 +45,15 @@ class ExpectedPartialObjectStreamHarness:
                     continue
                 outer_partial[key] = inner_partial
                 yield_key = _tuple_merge(len(outer_partial) - 1, inner_key)
-                yield_key = len(outer_partial) - 1 
+                yield_key = len(outer_partial) - 1
                 if inner_key is not None:
                     yield_key = _tuple_merge(yield_key, inner_key)
                 yield outer_partial.copy(), event, yield_key, value_change
-    
+
     def handle_dict(self, full_obj):
-        value_iterators = {
-            k: self(v) for k, v in full_obj.items()
-        }
-        # get initial OBJECT_CREATED values for all keys first 
-        outer_partial = {
-            k : next(v)[0] for k, v in value_iterators.items()
-        }
+        value_iterators = {k: self(v) for k, v in full_obj.items()}
+        # get initial OBJECT_CREATED values for all keys first
+        outer_partial = {k: next(v)[0] for k, v in value_iterators.items()}
         yield outer_partial.copy(), StreamEventEnum.OBJECT_CREATED, None, None
         for key in full_obj.keys():
             for inner_partial, event, inner_key, value_change in value_iterators[key]:
@@ -64,7 +63,7 @@ class ExpectedPartialObjectStreamHarness:
                 if inner_key is not None:
                     yield_key = _tuple_merge(yield_key, inner_key)
                 yield outer_partial.copy(), event, yield_key, value_change
-    
+
     def handle_string(self, full_obj):
         outer_partial = ""
         yield outer_partial, StreamEventEnum.OBJECT_CREATED, None, None
@@ -72,5 +71,9 @@ class ExpectedPartialObjectStreamHarness:
         tokens = tokenize(full_obj)
         for idx, token in enumerate(tokens):
             outer_partial += token
-            event = StreamEventEnum.KEY_COMPLETED if idx == len(tokens) - 1 else StreamEventEnum.KEY_UPDATED
+            event = (
+                StreamEventEnum.KEY_COMPLETED
+                if idx == len(tokens) - 1
+                else StreamEventEnum.KEY_UPDATED
+            )
             yield outer_partial, event, None, token

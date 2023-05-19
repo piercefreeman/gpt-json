@@ -9,14 +9,17 @@ from gpt_json import GPTJSON, GPTMessage, GPTMessageRole
 load_dotenv()
 API_KEY = getenv("OPENAI_API_KEY")
 
+
 class QuoteSchema(BaseModel):
     quotes: list[str] = Field(description="Max quantity {max_items}.")
+
 
 SYSTEM_PROMPT = """
 Generate fictitious quotes that are {sentiment}.
 
 {json_schema}
 """
+
 
 async def runner():
     gpt_json = GPTJSON[QuoteSchema](API_KEY)
@@ -32,5 +35,6 @@ async def runner():
 
     print(response)
     print(f"Quotes: {response.quotes}")
+
 
 asyncio.run(runner())
