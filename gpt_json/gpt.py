@@ -237,7 +237,7 @@ class GPTJSON(Generic[SchemaType]):
 
             partial_data, proposed_event = parse_streamed_json(cumulative_response)
             partial_response: StreamingObject[SchemaType] = prepare_streaming_object(
-                self.schema_model, partial_data, previous_partial, proposed_event
+                self.schema_model, partial_data, previous_partial, proposed_event  # type: ignore
             )
 
             if (
