@@ -4,7 +4,7 @@ from json import loads as json_loads
 from json.decoder import JSONDecodeError
 from typing import (
     Any,
-    AsyncGenerator,
+    AsyncIterator,
     Generic,
     List,
     Type,
@@ -181,7 +181,7 @@ class GPTJSON(Generic[SchemaType]):
         messages: list[GPTMessage],
         max_response_tokens: int | None = None,
         format_variables: dict[str, Any] | None = None,
-    ) -> AsyncGenerator[StreamingObject[SchemaType], None]:
+    ) -> AsyncIterator[StreamingObject[SchemaType]]:
         """
         See `run` for documentation. This method is an async generator wrapper around `run` that streams partial results
         instead of returning them all at once.
@@ -197,6 +197,8 @@ class GPTJSON(Generic[SchemaType]):
                 raise NotImplementedError(
                     "For now, streaming is not supported for nested dictionary responses."
                 )
+        if self.schema_model is None:
+            return
 
         messages = [
             self.fill_message_template(message, format_variables or {})
@@ -233,10 +235,11 @@ class GPTJSON(Generic[SchemaType]):
                 # Ignore finish message
                 continue
 
-            cumulative_response += response.choices[0].delta.content
+            cumulative_response += response.choices[0].delta.content or ""
 
             partial_data, proposed_event = parse_streamed_json(cumulative_response)
-            partial_response = prepare_streaming_object(
+            self.schema_model = self.schema_model  # type: Type[SchemaType]
+            partial_response: StreamingObject[SchemaType] = prepare_streaming_object(
                 self.schema_model, partial_data, previous_partial, proposed_event
             )
 

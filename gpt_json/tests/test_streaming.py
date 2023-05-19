@@ -1,8 +1,10 @@
 import json
-from unittest.mock import MagicMock, patch
+from typing import Type, TypeVar
+from unittest.mock import patch
 
 import openai
 import pytest
+from pydantic import BaseModel
 
 from gpt_json.gpt import GPTJSON
 from gpt_json.models import GPTMessage, GPTMessageRole, GPTModelVersion
@@ -22,6 +24,8 @@ from gpt_json.tests.utils.test_streaming_utils import (
     ExampleStrDictSchema,
     ExampleStrListSchema,
 )
+
+SchemaType = TypeVar("SchemaType", bound=BaseModel)
 
 MOCK_ASSISTANT_CHUNK = {
     "id": "chatcmpl-7GWTw9HlmVFOiXyWNBfNKVFzA55yy",
@@ -77,7 +81,10 @@ def _mock_oai_streaming_chunks(
     ],
 )
 async def test_gpt_stream(
-    full_object, schema_typehint, expected_stream_data, should_support
+    full_object,
+    schema_typehint: Type[SchemaType],
+    expected_stream_data,
+    should_support,
 ):
     model_version = GPTModelVersion.GPT_3_5
     messages = [
@@ -87,7 +94,7 @@ async def test_gpt_stream(
         )
     ]
 
-    model = GPTJSON[schema_typehint](
+    model = GPTJSON[SchemaType](
         None,
         model=model_version,
         temperature=0.0,
@@ -115,18 +122,15 @@ async def test_gpt_stream(
                 ]
             return True
 
-        # Call the function and pass the expected parameters
-        streaming_objects = model.stream(messages=messages)
-
         idx = 0
-        async for stream_obj in streaming_objects:
+        async for stream_obj in model.stream(messages=messages):
             (
                 expected_partial_obj,
                 expected_event,
                 expected_update_key,
                 expected_value_change,
             ) = expected_stream_data[idx]
-            expected_obj = StreamingObject[schema_typehint](
+            expected_obj = StreamingObject[SchemaType](
                 partial_obj=schema_typehint(**expected_partial_obj),
                 event=expected_event,
                 updated_key=expected_update_key,

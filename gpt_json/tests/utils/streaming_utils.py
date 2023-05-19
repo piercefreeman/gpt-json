@@ -36,7 +36,7 @@ class ExpectedPartialObjectStreamHarness:
 
     def handle_list(self, full_obj):
         value_iterators = [self(v) for v in full_obj]
-        outer_partial = []
+        outer_partial: list[Any] = []
         yield outer_partial.copy(), StreamEventEnum.OBJECT_CREATED, None, None
         for key in range(len(full_obj)):
             for inner_partial, event, inner_key, value_change in value_iterators[key]:
