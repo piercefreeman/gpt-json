@@ -24,11 +24,14 @@ Respond with the following JSON schema:
 {json_schema}
 """
 
+
 class TutorSchema(BaseModel):
     student_model: str
     tutor_response: str
 
+
 gpt_json = GPTJSON[TutorSchema](API_KEY, model=GPTModelVersion.GPT_4)
+
 
 async def main():
     problem = "x^2 + 3 = 12"
@@ -47,26 +50,33 @@ async def main():
     ]
 
     print("\nTeacher's thought process:")
-    teacher_generator = gpt_json.stream(messages=messages, format_variables={"student_model_key": "student_model", "problem" : problem}) 
+    teacher_generator = gpt_json.stream(
+        messages=messages,
+        format_variables={"student_model_key": "student_model", "problem": problem},
+    )
     seen_keys = set()
     async for partial_teacher in teacher_generator:
         if partial_teacher.event == StreamEventEnum.OBJECT_CREATED:
             continue
 
         # print a heading when we see a new key
-        if partial_teacher.event == StreamEventEnum.KEY_UPDATED and partial_teacher.updated_key not in seen_keys:
+        if (
+            partial_teacher.event == StreamEventEnum.KEY_UPDATED
+            and partial_teacher.updated_key not in seen_keys
+        ):
             if partial_teacher.updated_key == "student_model":
                 print("Thought: ", end="")
             elif partial_teacher.updated_key == "tutor_response":
                 print("Response to student: ", end="")
             seen_keys.add(partial_teacher.updated_key)
-        
+
         print(partial_teacher.value_change, end="")
- 
+
         # print a newline when we see a key has been completed
         if partial_teacher.event == StreamEventEnum.KEY_COMPLETED:
             print()
         sys.stdout.flush()
-    
+
+
 if __name__ == "__main__":
     asyncio.run(main())
