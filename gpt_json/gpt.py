@@ -13,6 +13,7 @@ from typing import (
     get_origin,
 )
 
+import anthropic
 import backoff
 import openai
 from openai.error import APIConnectionError, RateLimitError
@@ -20,7 +21,13 @@ from openai.error import Timeout as OpenAITimeout
 from pydantic import BaseModel
 from tiktoken import encoding_for_model
 
-from gpt_json.models import FixTransforms, GPTMessage, GPTModelVersion, ResponseType
+from gpt_json.models import (
+    FixTransforms,
+    GPTMessage,
+    GPTMessageRole,
+    GPTModelVersion,
+    ResponseType,
+)
 from gpt_json.parsers import find_json_response
 from gpt_json.prompts import generate_schema_prompt
 from gpt_json.streaming import (
@@ -28,6 +35,7 @@ from gpt_json.streaming import (
     parse_streamed_json,
     prepare_streaming_object,
 )
+from gpt_json.token_utils import approx_num_tokens_from_messages, oai_approx_tokenize
 from gpt_json.transformations import fix_bools, fix_truncated_json
 from gpt_json.types_oai import ChatCompletionChunk
 
@@ -69,11 +77,11 @@ class GPTJSON(Generic[SchemaType]):
         # For messages that are relatively deterministic
         temperature=0.2,
         timeout=60,
-        openai_max_retries=3,
+        api_max_retries=3,
         **kwargs,
     ):
         """
-        :param api_key: OpenAI API key, if `OPENAI_API_KEY` environment variable is not set
+        :param api_key: OpenAI/Anthropic API key, if `OPENAI_API_KEY`/`ANTHROPIC_API_KEY` environment variable is not set
         :param model: GPTModelVersion or string model name
         :param auto_trim: If True, automatically trim messages to fit within the model's token limit
         :param auto_trim_response_overhead: If auto_trim is True, will leave at least `auto_trim_response_overhead` space
@@ -88,8 +96,8 @@ class GPTJSON(Generic[SchemaType]):
         self.auto_trim = auto_trim
         self.temperature = temperature
         self.timeout = timeout
-        self.openai_max_retries = openai_max_retries
-        self.openai_arguments = kwargs
+        self.api_max_retries = api_max_retries
+        self.api_arguments = kwargs
         self.schema_model = self._cls_schema_model
         self.__class__._cls_schema_model = None
 
@@ -107,15 +115,21 @@ class GPTJSON(Generic[SchemaType]):
                 "GPTJSON needs to be instantiated with either a pydantic.BaseModel schema or a list of those schemas."
             )
 
-        if self.auto_trim:
-            if "gpt-4" in self.model:
-                self.max_tokens = 8192 - auto_trim_response_overhead
-            elif "gpt-3.5" in self.model:
-                self.max_tokens = 4096 - auto_trim_response_overhead
-            else:
-                raise ValueError(
-                    "Unknown model to infer max tokens, see https://platform.openai.com/docs/models/gpt-4 for more information on token length."
-                )
+        auto_trim_response_overhead = auto_trim_response_overhead if auto_trim else 0
+
+        if "gpt-4" in self.model:
+            self.max_tokens = 8192 - auto_trim_response_overhead
+        elif "gpt-3.5" in self.model:
+            self.max_tokens = 4096 - auto_trim_response_overhead
+        elif "claud-v1" in self.model:
+            # todo confirm this number
+            self.max_tokens = 8192 - auto_trim_response_overhead
+        elif "claud-v1-100k" in self.model:
+            self.max_tokens = 100000 - auto_trim_response_overhead
+        else:
+            raise ValueError(
+                "Unknown model to infer max tokens, see https://platform.openai.com/docs/models/gpt-4 or https://console.anthropic.com/docs/api/reference for more information on token length."
+            )
 
         self.schema_prompt = generate_schema_prompt(self.schema_model)
         self.api_key = api_key
@@ -125,6 +139,7 @@ class GPTJSON(Generic[SchemaType]):
         messages: list[GPTMessage],
         max_response_tokens: int | None = None,
         format_variables: dict[str, Any] | None = None,
+        contextaware_options: dict[str, Any] | None = None,
     ) -> tuple[SchemaType | list[SchemaType], FixTransforms] | tuple[None, None]:
         """
         :param messages: List of GPTMessage objects to send to the API
@@ -137,10 +152,85 @@ class GPTJSON(Generic[SchemaType]):
             to decide whether they want to allow the modifications or not.
 
         """
-        messages = [
-            self.fill_message_template(message, format_variables or {})
-            for message in messages
-        ]
+        if contextaware_options is not None:
+            if format_variables is None:
+                raise ValueError(
+                    "format_variables must be provided if contextaware_options is provided."
+                )
+
+            def is_iterable(obj):
+                try:
+                    iter(obj)
+                    return True
+                except TypeError:
+                    return False
+
+            # TODO: first, assume contextaware_options is valid with all options
+            # still a few criteria to check:
+            # 1. the target variable exists in format_variables
+            # 2. the target variable must be iterable
+            if not contextaware_options["target"] in format_variables:
+                raise ValueError(
+                    "contextaware_options['target'] must be a key in format_variables."
+                )
+            if not is_iterable(format_variables[contextaware_options["target"]]):
+                raise ValueError("contextaware_options['target'] must be an iterable.")
+
+            # NOTE: for now, we only assume one target variable render
+            # TODO: catch this and raise valueerror
+            target_iterator = format_variables.pop(contextaware_options["target"])
+            partial_messages = [
+                self.fill_message_template(
+                    message,
+                    {
+                        contextaware_options["target"]: "{"
+                        + contextaware_options["target"]
+                        + "}",
+                        **format_variables,
+                    },
+                )
+                for message in messages
+            ]
+            prefill_token_count = approx_num_tokens_from_messages(
+                [self.message_to_dict(message) for message in partial_messages]
+            )
+            token_space = (
+                self.max_tokens
+                - prefill_token_count
+                - (max_response_tokens if max_response_tokens else 0)
+            )
+            separator_tokens = len(
+                oai_approx_tokenize(contextaware_options["elem_separator"])
+            )
+            contextaware_tokens = 0
+            contextaware_target_subset = []
+            elem_render_fn = contextaware_options["elem_render"]
+            for target in target_iterator:
+                contextaware_tokens += len(oai_approx_tokenize(elem_render_fn(target)))
+                if contextaware_tokens + separator_tokens > token_space:
+                    break
+                contextaware_target_subset.append(target)
+                contextaware_tokens += separator_tokens
+
+            rendered_contextaware_subset = contextaware_options["elem_separator"].join(
+                [elem_render_fn(elem) for elem in contextaware_target_subset]
+            )
+            messages = [
+                self.fill_message_template(
+                    message,
+                    {
+                        **format_variables,
+                        contextaware_options["target"]: rendered_contextaware_subset,
+                    },
+                )
+                for message in messages
+            ]
+
+        else:
+            messages = [
+                self.fill_message_template(message, format_variables or {})
+                for message in messages
+            ]
 
         # Most requests succeed on the first try but we wrap it locally here in case
         # there is some temporarily instability with the API. If there are longer periods
@@ -148,7 +238,7 @@ class GPTJSON(Generic[SchemaType]):
         backoff_request_submission = backoff.on_exception(
             backoff.expo,
             (RateLimitError, OpenAITimeout, APIConnectionError),
-            max_tries=self.openai_max_retries,
+            max_tries=self.api_max_retries,
             on_backoff=handle_backoff,
         )(self.submit_request)
 
@@ -209,7 +299,7 @@ class GPTJSON(Generic[SchemaType]):
         backoff_request_submission = backoff.on_exception(
             backoff.expo,
             (RateLimitError, OpenAITimeout, APIConnectionError),
-            max_tries=self.openai_max_retries,
+            max_tries=self.api_max_retries,
             on_backoff=handle_backoff,
         )(self.submit_request)
 
@@ -313,7 +403,7 @@ class GPTJSON(Generic[SchemaType]):
             api_key=self.api_key,
             stream=stream,
             **optional_parameters,
-            **self.openai_arguments,
+            **self.api_arguments,
         )
 
     def fill_message_template(
