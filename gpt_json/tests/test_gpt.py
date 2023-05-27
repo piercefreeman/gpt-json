@@ -6,6 +6,7 @@ from unittest.mock import AsyncMock, patch
 import openai
 import pytest
 from pydantic import BaseModel, Field
+from openai.error import Timeout as OpenAITimeout
 
 from gpt_json.gpt import GPTJSON
 from gpt_json.models import FixTransforms, GPTMessage, GPTMessageRole, GPTModelVersion
@@ -356,7 +357,7 @@ async def test_timeout():
 
         start_time = time()
 
-        with pytest.raises(TimeoutError):
+        with pytest.raises(OpenAITimeout):
             await gpt.run(
                 [GPTMessage(GPTMessageRole.SYSTEM, "message content")],
             )

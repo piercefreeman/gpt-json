@@ -1,5 +1,5 @@
 import logging
-from asyncio import wait_for
+from asyncio import wait_for, TimeoutError as AsyncTimeoutError
 from dataclasses import replace
 from json import loads as json_loads
 from json.decoder import JSONDecodeError
@@ -328,7 +328,10 @@ class GPTJSON(Generic[SchemaType]):
         if self.timeout is None:
             return await execute_prediction
         else:
-            return await wait_for(execute_prediction, timeout=self.timeout)
+            try:
+                return await wait_for(execute_prediction, timeout=self.timeout)
+            except AsyncTimeoutError:
+                raise OpenAITimeout
 
     def fill_message_template(
         self, message: GPTMessage, format_variables: dict[str, Any]
