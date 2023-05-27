@@ -363,13 +363,13 @@ class GPTJSON(Generic[SchemaType]):
             formatted_claud_prompt = (
                 f"{anthropic.HUMAN_PROMPT} {messages[0].content}{anthropic.AI_PROMPT}"
             )
-            print("formatted_claud_prompt", formatted_claud_prompt)
             c = anthropic.Client(self.api_key)
             return await c.acompletion(
                 prompt=formatted_claud_prompt,
                 stop_sequences=[anthropic.HUMAN_PROMPT],
                 model="claude-v1",
-                max_tokens_to_sample=100,
+                **optional_parameters,
+                **self.api_arguments,
             )
 
     def fill_message_template(

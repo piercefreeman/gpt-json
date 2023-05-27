@@ -43,15 +43,4 @@ async def runner():
     print(f"Detected sentiment: {response.sentiment}")
 
 
-async def main():
-    c = anthropic.Client(os.environ["ANTHROPIC_API_KEY"])
-    resp = await c.acompletion(
-        prompt=f"{anthropic.HUMAN_PROMPT} How many toes do dogs have?{anthropic.AI_PROMPT}",
-        stop_sequences=[anthropic.HUMAN_PROMPT],
-        model="claude-v1",
-        max_tokens_to_sample=100,
-    )
-    print(resp)
-
-
 asyncio.run(runner())
