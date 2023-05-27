@@ -27,6 +27,8 @@ class GPTMessageRole(EnumSuper):
 class GPTModelVersion(EnumSuper):
     GPT_3_5 = "gpt-3.5-turbo"
     GPT_4 = "gpt-4-0314"
+    CLAUD = "claud-v1"
+    CLAUD_100K = "claud-v1-100k"
 
 
 @unique
