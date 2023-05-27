@@ -1,4 +1,5 @@
 import logging
+from asyncio import wait_for, TimeoutError as AsyncTimeoutError
 from dataclasses import replace
 from json import loads as json_loads
 from json.decoder import JSONDecodeError
@@ -68,7 +69,7 @@ class GPTJSON(Generic[SchemaType]):
         auto_trim_response_overhead: int = 0,
         # For messages that are relatively deterministic
         temperature=0.2,
-        timeout=60,
+        timeout: int | None = None,
         openai_max_retries=3,
         **kwargs,
     ):
@@ -79,7 +80,7 @@ class GPTJSON(Generic[SchemaType]):
         :param auto_trim_response_overhead: If auto_trim is True, will leave at least `auto_trim_response_overhead` space
             for the output payload. For GPT, initial prompt + response <= allowed tokens.
         :param temperature: Temperature (or variation) of response payload; 0 is the most deterministic, 1 is the most random
-        :param timeout: Timeout in seconds for each OpenAI API calls
+        :param timeout: Timeout in seconds for each OpenAI API calls before timing out.
         :param openai_max_retries: Amount of times to retry failed API calls, caused by often transient load or rate limit issues
         :param kwargs: Additional arguments to pass to OpenAI's `openai.Completion.create` method
 
@@ -294,6 +295,10 @@ class GPTJSON(Generic[SchemaType]):
         max_response_tokens: int | None,
         stream: bool = False,
     ):
+        """
+        If a request times out, will raise an OpenAITimeout.
+
+        """
         logger.debug("------- START MESSAGE ----------")
         logger.debug(messages)
         logger.debug("------- END MESSAGE ----------")
@@ -305,16 +310,28 @@ class GPTJSON(Generic[SchemaType]):
         if max_response_tokens:
             optional_parameters["max_tokens"] = max_response_tokens
 
-        return await openai.ChatCompletion.acreate(
+        execute_prediction = openai.ChatCompletion.acreate(
             model=self.model,
             messages=[self.message_to_dict(message) for message in messages],
             temperature=self.temperature,
-            timeout=self.timeout,
             api_key=self.api_key,
             stream=stream,
             **optional_parameters,
             **self.openai_arguments,
         )
+
+        # The 'timeout' parameter supported by the OpenAI API is only used to cycle
+        # the model while it's warming up
+        # https://github.com/openai/openai-python/blob/fe3abd16b582ae784d8a73fd249bcdfebd5752c9/openai/api_resources/chat_completion.py#L41
+        # We instead use a client-side timeout to prevent the API from hanging, which is more inline
+        # with the expected behavior of our passed timeout.
+        if self.timeout is None:
+            return await execute_prediction
+        else:
+            try:
+                return await wait_for(execute_prediction, timeout=self.timeout)
+            except AsyncTimeoutError:
+                raise OpenAITimeout
 
     def fill_message_template(
         self, message: GPTMessage, format_variables: dict[str, Any]

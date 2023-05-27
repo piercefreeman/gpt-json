@@ -1,8 +1,12 @@
-from unittest.mock import patch
+import asyncio
+from json import dumps as json_dumps
+from time import time
+from unittest.mock import AsyncMock, patch
 
 import openai
 import pytest
 from pydantic import BaseModel, Field
+from openai.error import Timeout as OpenAITimeout
 
 from gpt_json.gpt import GPTJSON
 from gpt_json.models import FixTransforms, GPTMessage, GPTMessageRole, GPTModelVersion
@@ -172,7 +176,6 @@ async def test_acreate(
                 for message in messages
             ],
             temperature=0.0,
-            timeout=60,
             api_key=None,
             stream=False,
         )
@@ -311,3 +314,56 @@ async def test_unable_to_find_valid_json_payload():
 async def test_unknown_model_to_infer_max_tokens():
     with pytest.raises(ValueError):
         GPTJSON[MySchema](model="UnknownModel", auto_trim=True)
+
+
+@pytest.mark.asyncio
+async def test_timeout():
+    class MockResponse:
+        """
+        We need to build an actual response class here because the internal openai
+        code postprocesses with the aiohttp response.
+
+        """
+
+        def __init__(self, response_text: str):
+            self.status = 200
+            self.headers: dict[str, str] = {}
+            self.response_text = response_text
+
+        async def read(self):
+            mock_response = {
+                "choices": [
+                    {
+                        "message": {
+                            "role": "assistant",
+                            "content": self.response_text,
+                        },
+                        "index": 0,
+                        "finish_reason": "stop",
+                    }
+                ]
+            }
+            return json_dumps(mock_response).encode()
+
+    with patch("aiohttp.ClientSession.request", new_callable=AsyncMock) as mock_request:
+        # Mock a stalling request
+        async def side_effect(*args, **kwargs):
+            await asyncio.sleep(4)
+            return MockResponse("TEST_RESPONSE")
+
+        mock_request.side_effect = side_effect
+
+        gpt = GPTJSON[MySchema](api_key="ABC", timeout=2)
+
+        start_time = time()
+
+        with pytest.raises(OpenAITimeout):
+            await gpt.run(
+                [GPTMessage(GPTMessageRole.SYSTEM, "message content")],
+            )
+
+        end_time = time()
+        duration = end_time - start_time
+
+        # Assert duration is about 2 seconds
+        pytest.approx(duration, 2, 0.2)
