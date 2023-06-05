@@ -53,7 +53,8 @@ class TokenTruncationIterator:
         self._idx = 0
 
     def __len__(self):
-        return len(self.tokens)
+        # + 1 because we include both full and empty text
+        return len(self.tokens) + 1
 
     def __iter__(self):
         return self

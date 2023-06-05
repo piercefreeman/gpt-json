@@ -37,12 +37,12 @@ from gpt_json.streaming import (
     parse_streamed_json,
     prepare_streaming_object,
 )
-from gpt_json.token_utils import (
+from gpt_json.transformations import fix_bools, fix_truncated_json
+from gpt_json.truncation import (
     approx_num_tokens_from_messages,
     oai_approx_tokenize,
     truncate_tokens,
 )
-from gpt_json.transformations import fix_bools, fix_truncated_json
 from gpt_json.types_oai import ChatCompletionChunk
 
 logger = logging.getLogger("gptjson_logger")
@@ -400,6 +400,11 @@ class GPTJSON(Generic[SchemaType]):
                 ]
             )
         )
+
+        if target_variable_max_tokens < 0:
+            raise ValueError(
+                f"Truncation options max_prompt_tokens {truncation_options.max_prompt_tokens} is too small to fit the messages."
+            )
 
         truncated_target_variable = truncate_tokens(
             text=format_variables[truncation_options.target_variable],
