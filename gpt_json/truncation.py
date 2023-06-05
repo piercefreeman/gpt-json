@@ -1,3 +1,6 @@
+import random
+from typing import Callable
+
 import tiktoken
 
 from gpt_json.models import VariableTruncationMode
@@ -36,55 +39,26 @@ def approx_num_tokens_from_messages(messages, model="gpt-3.5-turbo-0301"):
     return num_tokens
 
 
-def truncate_tokens(text: str, mode: VariableTruncationMode, max_tokens: int):
-    truncation_iter = TokenTruncationIterator(text, mode)
-    for truncated_text, num_tokens in truncation_iter:
-        if num_tokens <= max_tokens:
-            return truncated_text
-
-
-class TokenTruncationIterator:
-    def __init__(self, text: str, mode: VariableTruncationMode):
-        self.text = text
-        self.mode = mode
-
-        self.tokens = oai_approx_tokenize(text)
-
-        self._idx = 0
-
-    def __len__(self):
-        # + 1 because we include both full and empty text
-        return len(self.tokens) + 1
-
-    def __iter__(self):
-        return self
-
-    def __next__(self):
-        if self._idx >= len(self):
-            raise StopIteration
-
-        if self.mode == VariableTruncationMode.END:
-            truncated_text = (
-                oai_decode(self.tokens[: -self._idx]) if self._idx else self.text
-            )
-            num_tokens = len(self.tokens) - self._idx
-        elif self.mode == VariableTruncationMode.BEGINNING:
-            truncated_text = oai_decode(self.tokens[self._idx :])
-            num_tokens = len(self.tokens) - self._idx
-
-        self._idx += 1
-        return truncated_text, num_tokens
-
-
-if __name__ == "__main__":
-    print(oai_approx_tokenize("hello world"))
-    print(oai_decode(oai_approx_tokenize("hello world")))
-
-    tti = TokenTruncationIterator(
-        "hello world goodbye world", VariableTruncationMode.END
-    )
-    print([x for x in tti])
-    tti = TokenTruncationIterator(
-        "hello world goodbye world", VariableTruncationMode.BEGINNING
-    )
-    print([x for x in tti])
+def truncate_tokens(
+    text: str,
+    mode: VariableTruncationMode,
+    max_tokens: int,
+    custom_truncate_next: Callable[[str], str] | None = None,
+):
+    if mode == VariableTruncationMode.TRAILING:
+        return (
+            oai_decode(oai_approx_tokenize(text)[-max_tokens:]) if max_tokens else text
+        )
+    elif mode == VariableTruncationMode.BEGINNING:
+        return oai_decode(oai_approx_tokenize(text)[:max_tokens])
+    elif mode == VariableTruncationMode.MIDDLE:
+        middle = len(oai_approx_tokenize(text)) // 2
+        start = middle - max_tokens // 2
+        return oai_decode(oai_approx_tokenize(text)[start : start + max_tokens])
+    elif mode == VariableTruncationMode.RANDOM:
+        return oai_decode(random.sample(oai_approx_tokenize(text), max_tokens))
+    elif mode == VariableTruncationMode.CUSTOM and custom_truncate_next is not None:
+        tokens = oai_approx_tokenize(text)
+        while len(tokens) > max_tokens:
+            tokens = oai_approx_tokenize(custom_truncate_next(oai_decode(tokens)))
+        return oai_decode(tokens)

@@ -38,11 +38,7 @@ from gpt_json.streaming import (
     prepare_streaming_object,
 )
 from gpt_json.transformations import fix_bools, fix_truncated_json
-from gpt_json.truncation import (
-    approx_num_tokens_from_messages,
-    oai_approx_tokenize,
-    truncate_tokens,
-)
+from gpt_json.truncation import approx_num_tokens_from_messages, truncate_tokens
 from gpt_json.types_oai import ChatCompletionChunk
 
 logger = logging.getLogger("gptjson_logger")
@@ -380,6 +376,13 @@ class GPTJSON(Generic[SchemaType]):
             raise ValueError(
                 f"Truncation options max_prompt_tokens {truncation_options.max_prompt_tokens} plus max_response_tokens {max_response_tokens} exceeds model max tokens {self.max_tokens}."
             )
+        if (
+            truncation_options.truncation_mode == VariableTruncationMode.CUSTOM
+            and truncation_options.custom_truncate_next is None
+        ):
+            raise ValueError(
+                "Error in parsing truncation options: custom_truncate_next must be set when mode is CUSTOM."
+            )
 
         # if max_prompt_tokens is not set, we use max_tokens - max_response_tokens
         truncation_options.max_prompt_tokens = truncation_options.max_prompt_tokens or (
@@ -410,6 +413,7 @@ class GPTJSON(Generic[SchemaType]):
             text=format_variables[truncation_options.target_variable],
             mode=truncation_options.truncation_mode,
             max_tokens=target_variable_max_tokens,
+            custom_truncate_next=truncation_options.custom_truncate_next,
         )
 
         return [

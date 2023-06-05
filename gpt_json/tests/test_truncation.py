@@ -1,4 +1,4 @@
-from dataclasses import Field
+import random
 
 import pytest
 from pydantic import BaseModel
@@ -10,7 +10,7 @@ from gpt_json.models import (
     TruncationOptions,
     VariableTruncationMode,
 )
-from gpt_json.truncation import TokenTruncationIterator
+from gpt_json.truncation import truncate_tokens
 
 
 def test_fill_messages_truncated():
@@ -32,7 +32,7 @@ def test_fill_messages_truncated():
         truncation_options=TruncationOptions(
             target_variable="long_text",
             max_prompt_tokens=20,
-            truncation_mode=VariableTruncationMode.END,
+            truncation_mode=VariableTruncationMode.BEGINNING,
         ),
         max_response_tokens=None,
     ) == [
@@ -63,35 +63,73 @@ def test_fill_messages_truncated_failure_case():
             truncation_options=TruncationOptions(
                 target_variable="long_text",
                 max_prompt_tokens=2,
-                truncation_mode=VariableTruncationMode.END,
+                truncation_mode=VariableTruncationMode.BEGINNING,
             ),
             max_response_tokens=None,
         )
 
 
-def test_token_truncation_iterator_end_mode():
-    truncation_iterator = TokenTruncationIterator(
-        "hello world goodbye world",
-        VariableTruncationMode.END,
+def test_token_truncation_end_mode():
+    assert (
+        truncate_tokens(
+            "hello world goodbye world world", VariableTruncationMode.BEGINNING, 2
+        )
+        == "hello world"
     )
-    assert list(truncation_iterator) == [
-        ("hello world goodbye world", 4),
-        ("hello world goodbye", 3),
-        ("hello world", 2),
-        ("hello", 1),
-        ("", 0),
-    ]
 
 
-def test_token_truncation_iterator_beginning_mode():
-    truncation_iterator = TokenTruncationIterator(
-        "hello world goodbye world",
-        VariableTruncationMode.BEGINNING,
+def test_token_truncation_beginning_mode():
+    assert (
+        truncate_tokens(
+            "hello world world goodbye world", VariableTruncationMode.TRAILING, 2
+        )
+        == " goodbye world"
     )
-    assert list(truncation_iterator) == [
-        ("hello world goodbye world", 4),
-        (" world goodbye world", 3),
-        (" goodbye world", 2),
-        (" world", 1),
-        ("", 0),
-    ]
+
+
+def test_token_truncation_middle_mode():
+    assert (
+        truncate_tokens(
+            "hello world goodbye world world", VariableTruncationMode.MIDDLE, 1
+        )
+        == " goodbye"
+    )
+
+    assert (
+        truncate_tokens(
+            "hello world goodbye world world", VariableTruncationMode.MIDDLE, 2
+        )
+        == " world goodbye"
+    )
+
+    assert (
+        truncate_tokens(
+            "hello world goodbye world world", VariableTruncationMode.MIDDLE, 3
+        )
+        == " world goodbye world"
+    )
+
+
+def test_token_truncation_random_mode():
+    random.seed(0)
+    assert (
+        truncate_tokens(
+            "hello world goodbye world world", VariableTruncationMode.RANDOM, 2
+        )
+        == " world world"
+    )
+
+
+def test_token_truncation_custom_mode():
+    def _custom_truncate(text_prev):
+        return " | ".join(text_prev.split(" | ")[:-1])
+
+    assert (
+        truncate_tokens(
+            "hello | world | goodbye | world | world",
+            VariableTruncationMode.CUSTOM,
+            3,
+            _custom_truncate,
+        )
+        == "hello | world"
+    )
