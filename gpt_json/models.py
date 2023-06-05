@@ -17,6 +17,12 @@ class ResponseType(EnumSuper):
 
 
 @unique
+class VariableTruncationMode(EnumSuper):
+    BEGINNING = "BEGINNING"
+    END = "END"
+
+
+@unique
 class GPTMessageRole(EnumSuper):
     SYSTEM = "system"
     USER = "user"
@@ -55,3 +61,14 @@ class GPTMessage:
 
     role: GPTMessageRole
     content: str
+
+
+@dataclass
+class TruncationOptions:
+    """
+    Options for truncating the input variables
+    """
+
+    target_variable: str
+    truncation_mode: VariableTruncationMode
+    max_prompt_tokens: int | None = None
