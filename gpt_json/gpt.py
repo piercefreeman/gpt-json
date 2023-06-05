@@ -350,8 +350,8 @@ class GPTJSON(Generic[SchemaType]):
 
     def fill_messages(
         self,
-        messages: GPTMessage,
-        format_variables: dict[str, Any],
+        messages: list[GPTMessage],
+        format_variables: dict[str, Any] | None,
         truncation_options: TruncationOptions | None,
         max_response_tokens: int | None,
     ):
@@ -383,7 +383,7 @@ class GPTJSON(Generic[SchemaType]):
 
         # if max_prompt_tokens is not set, we use max_tokens - max_response_tokens
         truncation_options.max_prompt_tokens = truncation_options.max_prompt_tokens or (
-            self.max_tokens - max_response_tokens
+            self.max_tokens - (max_response_tokens or 0)
         )
 
         # fill the messages without the target variable to calculate the "space" we have left
