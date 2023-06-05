@@ -198,6 +198,7 @@ class GPTJSON(Generic[SchemaType]):
         messages: list[GPTMessage],
         max_response_tokens: int | None = None,
         format_variables: dict[str, Any] | None = None,
+        truncation_options: TruncationOptions | None = None,
     ) -> AsyncIterator[StreamingObject[SchemaType]]:
         """
         See `run` for documentation. This method is an async generator wrapper around `run` that streams partial results
@@ -215,10 +216,9 @@ class GPTJSON(Generic[SchemaType]):
                     "For now, streaming is not supported for nested dictionary responses."
                 )
 
-        messages = [
-            self.fill_message_template(message, format_variables or {})
-            for message in messages
-        ]
+        messages = self.fill_messages(
+            messages, format_variables, truncation_options, max_response_tokens
+        )
 
         # Most requests succeed on the first try but we wrap it locally here in case
         # there is some temporarily instability with the API. If there are longer periods
