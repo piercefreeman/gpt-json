@@ -1,5 +1,6 @@
 import logging
-from asyncio import wait_for, TimeoutError as AsyncTimeoutError
+from asyncio import TimeoutError as AsyncTimeoutError
+from asyncio import wait_for
 from dataclasses import replace
 from json import loads as json_loads
 from json.decoder import JSONDecodeError
@@ -21,7 +22,14 @@ from openai.error import Timeout as OpenAITimeout
 from pydantic import BaseModel
 from tiktoken import encoding_for_model
 
-from gpt_json.models import FixTransforms, GPTMessage, GPTModelVersion, ResponseType
+from gpt_json.models import (
+    FixTransforms,
+    GPTMessage,
+    GPTModelVersion,
+    ResponseType,
+    TruncationOptions,
+    VariableTruncationMode,
+)
 from gpt_json.parsers import find_json_response
 from gpt_json.prompts import generate_schema_prompt
 from gpt_json.streaming import (
@@ -30,6 +38,7 @@ from gpt_json.streaming import (
     prepare_streaming_object,
 )
 from gpt_json.transformations import fix_bools, fix_truncated_json
+from gpt_json.truncation import num_tokens_from_messages, truncate_tokens
 from gpt_json.types_oai import ChatCompletionChunk
 
 logger = logging.getLogger("gptjson_logger")
@@ -108,15 +117,18 @@ class GPTJSON(Generic[SchemaType]):
                 "GPTJSON needs to be instantiated with either a pydantic.BaseModel schema or a list of those schemas."
             )
 
-        if self.auto_trim:
-            if "gpt-4" in self.model:
-                self.max_tokens = 8192 - auto_trim_response_overhead
-            elif "gpt-3.5" in self.model:
-                self.max_tokens = 4096 - auto_trim_response_overhead
-            else:
-                raise ValueError(
-                    "Unknown model to infer max tokens, see https://platform.openai.com/docs/models/gpt-4 for more information on token length."
-                )
+        if "gpt-4" in self.model:
+            self.max_tokens = (
+                8192 - auto_trim_response_overhead if self.auto_trim else 8192
+            )
+        elif "gpt-3.5" in self.model:
+            self.max_tokens = (
+                4096 - auto_trim_response_overhead if self.auto_trim else 4096
+            )
+        else:
+            raise ValueError(
+                "Unknown model to infer max tokens, see https://platform.openai.com/docs/models/gpt-4 for more information on token length."
+            )
 
         self.schema_prompt = generate_schema_prompt(self.schema_model)
         self.api_key = api_key
@@ -126,6 +138,7 @@ class GPTJSON(Generic[SchemaType]):
         messages: list[GPTMessage],
         max_response_tokens: int | None = None,
         format_variables: dict[str, Any] | None = None,
+        truncation_options: TruncationOptions | None = None,
     ) -> tuple[SchemaType | list[SchemaType], FixTransforms] | tuple[None, None]:
         """
         :param messages: List of GPTMessage objects to send to the API
@@ -138,10 +151,9 @@ class GPTJSON(Generic[SchemaType]):
             to decide whether they want to allow the modifications or not.
 
         """
-        messages = [
-            self.fill_message_template(message, format_variables or {})
-            for message in messages
-        ]
+        messages = self.fill_messages(
+            messages, format_variables, truncation_options, max_response_tokens
+        )
 
         # Most requests succeed on the first try but we wrap it locally here in case
         # there is some temporarily instability with the API. If there are longer periods
@@ -182,6 +194,7 @@ class GPTJSON(Generic[SchemaType]):
         messages: list[GPTMessage],
         max_response_tokens: int | None = None,
         format_variables: dict[str, Any] | None = None,
+        truncation_options: TruncationOptions | None = None,
     ) -> AsyncIterator[StreamingObject[SchemaType]]:
         """
         See `run` for documentation. This method is an async generator wrapper around `run` that streams partial results
@@ -199,10 +212,9 @@ class GPTJSON(Generic[SchemaType]):
                     "For now, streaming is not supported for nested dictionary responses."
                 )
 
-        messages = [
-            self.fill_message_template(message, format_variables or {})
-            for message in messages
-        ]
+        messages = self.fill_messages(
+            messages, format_variables, truncation_options, max_response_tokens
+        )
 
         # Most requests succeed on the first try but we wrap it locally here in case
         # there is some temporarily instability with the API. If there are longer periods
@@ -257,7 +269,6 @@ class GPTJSON(Generic[SchemaType]):
     def extract_json(self, completion_response, extract_type: ResponseType):
         """
         Assumes one main block of results, either list of dictionary
-
         """
         choices = completion_response["choices"]
 
@@ -332,6 +343,86 @@ class GPTJSON(Generic[SchemaType]):
                 return await wait_for(execute_prediction, timeout=self.timeout)
             except AsyncTimeoutError:
                 raise OpenAITimeout
+
+    def fill_messages(
+        self,
+        messages: list[GPTMessage],
+        format_variables: dict[str, Any] | None,
+        truncation_options: TruncationOptions | None,
+        max_response_tokens: int | None,
+    ):
+        if truncation_options is None:
+            return [
+                self.fill_message_template(message, format_variables or {})
+                for message in messages
+            ]
+
+        if (
+            not format_variables
+            or truncation_options.target_variable not in format_variables
+        ):
+            raise ValueError(
+                f"Variable {truncation_options.target_variable} not found in message variables."
+            )
+        if truncation_options.max_prompt_tokens is None and max_response_tokens is None:
+            raise ValueError(
+                "Error in parsing truncation options: Either truncation_options.max_prompt_tokens or max_response_tokens must be set."
+            )
+        if (
+            truncation_options.max_prompt_tokens is not None
+            and truncation_options.max_prompt_tokens + (max_response_tokens or 0)
+            > self.max_tokens
+        ):
+            raise ValueError(
+                f"Truncation options max_prompt_tokens {truncation_options.max_prompt_tokens} plus max_response_tokens {max_response_tokens} exceeds model max tokens {self.max_tokens}."
+            )
+
+        # if max_prompt_tokens is not set, we synthetically determine the maximum
+        # allowed amount of response tokens to keep the full prompt and response
+        # within the model length bounds
+        truncation_options.max_prompt_tokens = truncation_options.max_prompt_tokens or (
+            self.max_tokens - (max_response_tokens or 0)
+        )
+
+        # fill the messages without the target variable to calculate the "space" we have left
+        format_variables_no_target = format_variables.copy()
+        format_variables_no_target[truncation_options.target_variable] = ""
+        target_variable_max_tokens = (
+            truncation_options.max_prompt_tokens
+            - num_tokens_from_messages(
+                [
+                    self.message_to_dict(
+                        self.fill_message_template(message, format_variables_no_target)
+                    )
+                    for message in messages
+                ],
+                self.model,
+            )
+        )
+
+        if target_variable_max_tokens < 0:
+            raise ValueError(
+                f"Truncation options max_prompt_tokens {truncation_options.max_prompt_tokens} is too small to fit the messages."
+            )
+
+        truncated_target_variable = truncate_tokens(
+            text=format_variables[truncation_options.target_variable],
+            model=self.model,
+            mode=truncation_options.truncation_mode,
+            max_tokens=target_variable_max_tokens,
+            custom_truncate_next=truncation_options.custom_truncate_next,
+        )
+
+        return [
+            self.fill_message_template(
+                message,
+                {
+                    **format_variables,
+                    truncation_options.target_variable: truncated_target_variable,
+                },
+            )
+            for message in messages
+        ]
 
     def fill_message_template(
         self, message: GPTMessage, format_variables: dict[str, Any]
