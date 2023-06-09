@@ -83,19 +83,3 @@ def truncate_tokens(
         return _decode(tokens)
     else:
         raise ValueError(f"Invalid truncation mode: {mode}")
-
-
-if __name__ == "__main__":
-    model_versions = [
-        GPTModelVersion.GPT_3_5,
-        GPTModelVersion.GPT_4,
-    ]
-    for model_version in model_versions:
-        text = "Hello, my name is John. I am a human."
-        tokens = tokenize(text, model_version)
-        decoded = decode(tokens, model_version)
-        print(f"Model: {model_version}")
-        print(f"Text: {text}")
-        print(f"Tokens: {tokens}")
-        print(f"Decoded: {decoded}")
-        print()
