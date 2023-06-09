@@ -16,6 +16,8 @@ from gpt_json.truncation import num_tokens_from_messages, truncate_tokens
 
 @pytest.mark.parametrize("model", [model.value for model in GPTModelVersion])
 def test_num_tokens_implemented(model):
+    # no need to assert anything specific, just that its implemented for all models
+    # i.e. doesn't throw an error
     num_tokens_from_messages([], model)
 
 
