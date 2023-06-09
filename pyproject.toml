@@ -12,6 +12,7 @@ tiktoken = "^0.3.3"
 openai = "^0.27.6"
 pydantic = "^1.10.7"
 backoff = "^2.2.1"
+anthropic = "^0.2.10"
 
 
 [tool.poetry.group.dev.dependencies]
