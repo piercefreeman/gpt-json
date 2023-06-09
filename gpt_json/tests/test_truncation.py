@@ -11,7 +11,12 @@ from gpt_json.models import (
     TruncationOptions,
     VariableTruncationMode,
 )
-from gpt_json.truncation import truncate_tokens
+from gpt_json.truncation import num_tokens_from_messages, truncate_tokens
+
+
+@pytest.mark.parametrize("model", [model.value for model in GPTModelVersion])
+def test_num_tokens_implemented(model):
+    num_tokens_from_messages([], model)
 
 
 def test_fill_messages_truncated():

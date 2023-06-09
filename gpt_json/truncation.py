@@ -6,22 +6,19 @@ import tiktoken
 from gpt_json.models import GPTModelVersion, VariableTruncationMode
 
 
-def tokenize(text: str, model: GPTModelVersion | str) -> list[int]:
+def tokenize(text: str, model: str) -> list[int]:
     enc = tiktoken.encoding_for_model(model)
     return [tok for tok in enc.encode(text)]
 
 
-def decode(tokens: list[int], model: GPTModelVersion | str) -> str:
+def decode(tokens: list[int], model: str) -> str:
     enc = tiktoken.encoding_for_model(model)
     return enc.decode(tokens)
 
 
-def num_tokens_from_messages(
-    messages: list[dict[str, str]], model: GPTModelVersion | str
-) -> int:
-    """Returns the number of tokens used by a list of messages.
-    NOTE: in the future, there may be structural changes to how messages are converted into content
-    that affect the number of tokens. More here: https://platform.openai.com/docs/guides/chat/managing-tokens
+def gpt_message_markup_v1(messages: list[dict[str, str]], model: str) -> int:
+    """Converts a list of messages into the number of tokens used by the model, following the
+    markup rules for GPT-3.5 and GPT-4 defined here: https://platform.openai.com/docs/guides/chat/managing-tokens.
     """
     encoding = tiktoken.encoding_for_model(model)
 
@@ -38,9 +35,25 @@ def num_tokens_from_messages(
     return num_tokens
 
 
+MODEL_MESSAGE_MARKUP = {
+    GPTModelVersion.GPT_4.value: gpt_message_markup_v1,
+    GPTModelVersion.GPT_3_5.value: gpt_message_markup_v1,
+}
+
+
+def num_tokens_from_messages(messages: list[dict[str, str]], model: str) -> int:
+    """Returns the number of tokens used by a list of messages.
+    NOTE: for future models, there may be structural changes to how messages are converted into content
+    that affect the number of tokens. Future models should be added to MODEL_MESSAGE_MARKUP.
+    """
+    if model not in MODEL_MESSAGE_MARKUP:
+        raise NotImplementedError(f"Model {model} message markup not implemented")
+    return MODEL_MESSAGE_MARKUP[model](messages, model)
+
+
 def truncate_tokens(
     text: str,
-    model: GPTModelVersion | str,
+    model: str,
     mode: VariableTruncationMode,
     max_tokens: int,
     custom_truncate_next: Callable[[str], str] | None = None,
