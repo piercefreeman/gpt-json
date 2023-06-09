@@ -147,7 +147,6 @@ async def test_gpt_stream(
                 for message in messages
             ],
             temperature=0.0,
-            timeout=60,
             stream=True,
             api_key=None,
         )

@@ -1,6 +1,7 @@
 import sys
 from dataclasses import dataclass
 from enum import Enum, unique
+from typing import Callable, Iterator
 
 if sys.version_info >= (3, 11):
     from enum import StrEnum
@@ -14,6 +15,15 @@ else:
 class ResponseType(EnumSuper):
     DICTIONARY = "DICTIONARY"
     LIST = "LIST"
+
+
+@unique
+class VariableTruncationMode(EnumSuper):
+    BEGINNING = "BEGINNING"
+    TRAILING = "TRAILING"
+    MIDDLE = "MIDDLE"
+    RANDOM = "RANDOM"
+    CUSTOM = "CUSTOM"
 
 
 @unique
@@ -72,3 +82,15 @@ class GPTMessage:
 
     role: GPTMessageRole
     content: str
+
+
+@dataclass
+class TruncationOptions:
+    """
+    Options for truncating the input variables
+    """
+
+    target_variable: str
+    truncation_mode: VariableTruncationMode
+    max_prompt_tokens: int | None = None
+    custom_truncate_next: Callable[[str], str] | None = None
