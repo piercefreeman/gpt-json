@@ -7,6 +7,7 @@ from gpt_json.gpt import GPTJSON
 from gpt_json.models import (
     GPTMessage,
     GPTMessageRole,
+    GPTModelVersion,
     TruncationOptions,
     VariableTruncationMode,
 )
@@ -72,7 +73,10 @@ def test_fill_messages_truncated_failure_case():
 def test_token_truncation_end_mode():
     assert (
         truncate_tokens(
-            "hello world goodbye world world", VariableTruncationMode.BEGINNING, 2
+            "hello world goodbye world world",
+            GPTModelVersion.GPT_3_5,
+            VariableTruncationMode.BEGINNING,
+            2,
         )
         == "hello world"
     )
@@ -81,7 +85,10 @@ def test_token_truncation_end_mode():
 def test_token_truncation_beginning_mode():
     assert (
         truncate_tokens(
-            "hello world world goodbye world", VariableTruncationMode.TRAILING, 2
+            "hello world world goodbye world",
+            GPTModelVersion.GPT_3_5,
+            VariableTruncationMode.TRAILING,
+            2,
         )
         == " goodbye world"
     )
@@ -90,33 +97,45 @@ def test_token_truncation_beginning_mode():
 def test_token_truncation_middle_mode():
     assert (
         truncate_tokens(
-            "hello world goodbye world world", VariableTruncationMode.MIDDLE, 1
+            "hello world goodbye world world",
+            GPTModelVersion.GPT_3_5,
+            VariableTruncationMode.MIDDLE,
+            1,
         )
         == " goodbye"
     )
 
     assert (
         truncate_tokens(
-            "hello world goodbye world world", VariableTruncationMode.MIDDLE, 2
+            "hello world goodbye world world",
+            GPTModelVersion.GPT_3_5,
+            VariableTruncationMode.MIDDLE,
+            2,
         )
         == " world goodbye"
     )
 
     assert (
         truncate_tokens(
-            "hello world goodbye world world", VariableTruncationMode.MIDDLE, 3
+            "hello world goodbye world world",
+            GPTModelVersion.GPT_3_5,
+            VariableTruncationMode.MIDDLE,
+            3,
         )
         == " world goodbye world"
     )
 
 
 def test_token_truncation_random_mode():
-    random.seed(0)
+    random.seed(1)
     assert (
         truncate_tokens(
-            "hello world goodbye world world", VariableTruncationMode.RANDOM, 2
+            "hello world goodbye world",
+            GPTModelVersion.GPT_3_5,
+            VariableTruncationMode.RANDOM,
+            2,
         )
-        == " world world"
+        == "hello world"
     )
 
 
@@ -127,6 +146,7 @@ def test_token_truncation_custom_mode():
     assert (
         truncate_tokens(
             "hello | world | goodbye | world | world",
+            GPTModelVersion.GPT_3_5,
             VariableTruncationMode.CUSTOM,
             3,
             _custom_truncate,

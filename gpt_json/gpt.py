@@ -38,7 +38,7 @@ from gpt_json.streaming import (
     prepare_streaming_object,
 )
 from gpt_json.transformations import fix_bools, fix_truncated_json
-from gpt_json.truncation import approx_num_tokens_from_messages, truncate_tokens
+from gpt_json.truncation import num_tokens_from_messages, truncate_tokens
 from gpt_json.types_oai import ChatCompletionChunk
 
 logger = logging.getLogger("gptjson_logger")
@@ -376,15 +376,10 @@ class GPTJSON(Generic[SchemaType]):
             raise ValueError(
                 f"Truncation options max_prompt_tokens {truncation_options.max_prompt_tokens} plus max_response_tokens {max_response_tokens} exceeds model max tokens {self.max_tokens}."
             )
-        if (
-            truncation_options.truncation_mode == VariableTruncationMode.CUSTOM
-            and truncation_options.custom_truncate_next is None
-        ):
-            raise ValueError(
-                "Error in parsing truncation options: custom_truncate_next must be set when mode is CUSTOM."
-            )
 
-        # if max_prompt_tokens is not set, we use max_tokens - max_response_tokens
+        # if max_prompt_tokens is not set, we synthetically determine the maximum
+        # allowed amount of response tokens to keep the full prompt and response
+        # within the model length bounds
         truncation_options.max_prompt_tokens = truncation_options.max_prompt_tokens or (
             self.max_tokens - (max_response_tokens or 0)
         )
@@ -394,13 +389,14 @@ class GPTJSON(Generic[SchemaType]):
         format_variables_no_target[truncation_options.target_variable] = ""
         target_variable_max_tokens = (
             truncation_options.max_prompt_tokens
-            - approx_num_tokens_from_messages(
+            - num_tokens_from_messages(
                 [
                     self.message_to_dict(
                         self.fill_message_template(message, format_variables_no_target)
                     )
                     for message in messages
-                ]
+                ],
+                self.model,
             )
         )
 
@@ -411,6 +407,7 @@ class GPTJSON(Generic[SchemaType]):
 
         truncated_target_variable = truncate_tokens(
             text=format_variables[truncation_options.target_variable],
+            model=self.model,
             mode=truncation_options.truncation_mode,
             max_tokens=target_variable_max_tokens,
             custom_truncate_next=truncation_options.custom_truncate_next,
