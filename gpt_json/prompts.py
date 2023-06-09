@@ -86,7 +86,7 @@ def messages_to_claude_prompt(messages: list[GPTMessage]) -> str:
     }
     base_prompt = "".join(
         [
-            f"{gpt_role_to_prefix[message.role]} {message.content}"
+            f"{gpt_role_to_prefix[message.role.value]} {message.content}"
             for message in messages
         ]
     )
