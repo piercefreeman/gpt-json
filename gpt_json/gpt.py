@@ -129,7 +129,6 @@ class GPTJSON(Generic[SchemaType]):
             elif "gpt-3.5" in self.model:
                 self.max_tokens = 4096 - auto_trim_response_overhead
             elif "claud-v1" in self.model:
-                # todo confirm this number
                 self.max_tokens = 9000 - auto_trim_response_overhead
             elif "claud-v1-100k" in self.model:
                 self.max_tokens = 100000 - auto_trim_response_overhead
