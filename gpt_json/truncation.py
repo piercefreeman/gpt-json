@@ -6,18 +6,18 @@ import tiktoken
 from gpt_json.models import GPTModelVersion, VariableTruncationMode
 
 
-def tokenize(text: str, model: GPTModelVersion) -> list[int]:
+def tokenize(text: str, model: GPTModelVersion | str) -> list[int]:
     enc = tiktoken.encoding_for_model(model)
     return [tok for tok in enc.encode(text)]
 
 
-def decode(tokens: list[int], model: GPTModelVersion) -> str:
+def decode(tokens: list[int], model: GPTModelVersion | str) -> str:
     enc = tiktoken.encoding_for_model(model)
     return enc.decode(tokens)
 
 
 def num_tokens_from_messages(
-    messages: list[dict[str, str]], model: GPTModelVersion
+    messages: list[dict[str, str]], model: GPTModelVersion | str
 ) -> int:
     """Returns the number of tokens used by a list of messages.
     NOTE: in the future, there may be structural changes to how messages are converted into content
@@ -40,7 +40,7 @@ def num_tokens_from_messages(
 
 def truncate_tokens(
     text: str,
-    model: GPTModelVersion,
+    model: GPTModelVersion | str,
     mode: VariableTruncationMode,
     max_tokens: int,
     custom_truncate_next: Callable[[str], str] | None = None,
@@ -63,11 +63,13 @@ def truncate_tokens(
     elif mode == VariableTruncationMode.RANDOM:
         slice_start = random.randint(0, len(_tokenize(text)) - max_tokens)
         return _decode(_tokenize(text)[slice_start : slice_start + max_tokens])
-    elif mode == VariableTruncationMode.CUSTOM and custom_truncate_next is not None:
+    elif mode == VariableTruncationMode.CUSTOM:
         tokens = _tokenize(text)
         while len(tokens) > max_tokens:
-            tokens = _tokenize(custom_truncate_next(_decode(tokens)))
+            tokens = _tokenize(custom_truncate_next(_decode(tokens)))  # type: ignore
         return _decode(tokens)
+    else:
+        raise ValueError(f"Invalid truncation mode: {mode}")
 
 
 if __name__ == "__main__":
