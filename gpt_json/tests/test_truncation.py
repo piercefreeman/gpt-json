@@ -101,6 +101,18 @@ def test_token_truncation_beginning_mode():
     )
 
 
+def test_token_truncation_claude():
+    assert (
+        truncate_tokens(
+            "hello world world goodbye world",
+            GPTModelVersion.CLAUDE.value,
+            VariableTruncationMode.TRAILING,
+            2,
+        )
+        == " goodbye world"
+    )
+
+
 def test_token_truncation_middle_mode():
     assert (
         truncate_tokens(

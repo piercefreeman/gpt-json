@@ -34,7 +34,7 @@ from gpt_json.models import (
     VariableTruncationMode,
 )
 from gpt_json.parsers import find_json_response
-from gpt_json.prompts import generate_schema_prompt
+from gpt_json.prompts import generate_schema_prompt, messages_to_claude_prompt
 from gpt_json.streaming import (
     StreamingObject,
     parse_streamed_json,
@@ -133,9 +133,9 @@ class GPTJSON(Generic[SchemaType]):
             self.max_tokens = 8192 - trim_tokens
         elif "gpt-3.5" in self.model:
             self.max_tokens = 4096 - trim_tokens
-        elif "claud-v1" in self.model:
+        elif "claude-v1" in self.model:
             self.max_tokens = 9000 - trim_tokens
-        elif "claud-v1-100k" in self.model:
+        elif "claude-v1-100k" in self.model:
             self.max_tokens = 100000 - trim_tokens
         else:
             raise ValueError(
@@ -163,16 +163,6 @@ class GPTJSON(Generic[SchemaType]):
             to decide whether they want to allow the modifications or not.
 
         """
-        if self.model_provider == ModelProvider.ANTHROPIC:
-            if len(messages) != 1 or messages[0].role != GPTMessageRole.USER:
-                raise NotImplementedError(
-                    "For now, CLAUDE models only support one User message."
-                )
-            if truncation_options is not None:
-                raise NotImplementedError(
-                    "For now, CLAUDE models do not support truncation."
-                )
-
         messages = self.fill_messages(
             messages, format_variables, truncation_options, max_response_tokens
         )
@@ -373,11 +363,8 @@ class GPTJSON(Generic[SchemaType]):
         elif self.model_provider == ModelProvider.ANTHROPIC:
             # format using Claude-mandated user prompt template
             # see more: https://console.anthropic.com/docs/api/reference#-v1-complete
-            formatted_claude_prompt = (
-                f"{anthropic.HUMAN_PROMPT} {messages[0].content}{anthropic.AI_PROMPT}"
-            )
             execute_prediction = anthropic.Client(self.api_key).acompletion(
-                prompt=formatted_claude_prompt,
+                prompt=messages_to_claude_prompt(messages),
                 stop_sequences=[anthropic.HUMAN_PROMPT],
                 model=self.model,
                 temperature=self.temperature,
