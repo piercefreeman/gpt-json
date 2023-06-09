@@ -37,6 +37,7 @@ from gpt_json.streaming import (
     prepare_streaming_object,
 )
 from gpt_json.transformations import fix_bools, fix_truncated_json
+from gpt_json.types_anthropic import AnthropicCompletion
 from gpt_json.types_oai import ChatCompletionChunk
 
 logger = logging.getLogger("gptjson_logger")
@@ -370,6 +371,8 @@ class GPTJSON(Generic[SchemaType]):
                 prompt=formatted_claude_prompt,
                 stop_sequences=[anthropic.HUMAN_PROMPT],
                 model=self.model,
+                temperature=self.temperature,
+                stream=stream,
                 **optional_parameters,
                 **self.api_arguments,
             )
