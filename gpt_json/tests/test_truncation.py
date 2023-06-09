@@ -54,7 +54,7 @@ def test_fill_messages_truncated_failure_case():
     gpt = GPTJSON[TestSchema](None)
 
     # this should fail because the max_prompt_tokens is too small
-    with pytest.raises(ValueError) as excinfo:
+    with pytest.raises(ValueError, match=".* max_prompt_tokens .* too small .*"):
         gpt.fill_messages(
             [
                 GPTMessage(role=GPTMessageRole.SYSTEM, content="system"),
@@ -73,12 +73,6 @@ def test_fill_messages_truncated_failure_case():
             ),
             max_response_tokens=None,
         )
-
-    error_msg = str(excinfo.value)
-    assert (
-        "max_prompt_tokens" in error_msg
-        and "too small to fit the messages" in error_msg
-    )
 
 
 def test_token_truncation_end_mode():
