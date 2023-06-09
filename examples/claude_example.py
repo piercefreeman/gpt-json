@@ -29,7 +29,7 @@ Text: I love this product. It's the best thing ever!
 
 
 async def runner():
-    gpt_json = GPTJSON[SentimentSchema](API_KEY, model=GPTModelVersion.CLAUD)
+    gpt_json = GPTJSON[SentimentSchema](API_KEY, model=GPTModelVersion.CLAUDE_100K)
     response, _ = await gpt_json.run(
         # Anthropic doesn't support system prompts, and only supports a single user message
         messages=[

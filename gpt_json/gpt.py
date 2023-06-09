@@ -26,6 +26,7 @@ from gpt_json.models import (
     GPTMessage,
     GPTMessageRole,
     GPTModelVersion,
+    ModelProvider,
     ResponseType,
 )
 from gpt_json.parsers import find_json_response
@@ -92,6 +93,7 @@ class GPTJSON(Generic[SchemaType]):
 
         """
         self.model = model.value if isinstance(model, GPTModelVersion) else model
+        self.model_provider = ModelProvider.get_provider(self.model)
         self.auto_trim = auto_trim
         self.temperature = temperature
         self.timeout = timeout
@@ -99,6 +101,12 @@ class GPTJSON(Generic[SchemaType]):
         self.api_arguments = kwargs
         self.schema_model = self._cls_schema_model
         self.__class__._cls_schema_model = None
+
+        if "oai_max_retries" in kwargs:
+            logging.warn(
+                "oai_max_retries will be deprecated soon, please use api_max_retries instead."
+            )
+            self.api_max_retries = kwargs["oai_max_retries"]
 
         if not self.schema_model:
             raise ValueError(
@@ -121,7 +129,7 @@ class GPTJSON(Generic[SchemaType]):
                 self.max_tokens = 4096 - auto_trim_response_overhead
             elif "claud-v1" in self.model:
                 # todo confirm this number
-                self.max_tokens = 8192 - auto_trim_response_overhead
+                self.max_tokens = 9000 - auto_trim_response_overhead
             elif "claud-v1-100k" in self.model:
                 self.max_tokens = 100000 - auto_trim_response_overhead
             else:
@@ -149,10 +157,10 @@ class GPTJSON(Generic[SchemaType]):
             to decide whether they want to allow the modifications or not.
 
         """
-        if self.model in [GPTModelVersion.CLAUD, GPTModelVersion.CLAUD_100K]:
+        if self.model_provider == ModelProvider.ANTHROPIC:
             if len(messages) != 1 or messages[0].role != GPTMessageRole.USER:
                 raise NotImplementedError(
-                    "For now, CLAUD only supports one User message."
+                    "For now, CLAUDE models only support one User message."
                 )
 
         messages = [
@@ -176,7 +184,7 @@ class GPTJSON(Generic[SchemaType]):
         logger.debug("------- RAW RESPONSE ----------")
         logger.debug(
             response["choices"]
-            if self.model in [GPTModelVersion.GPT_3_5, GPTModelVersion.GPT_4]
+            if self.model_provider == ModelProvider.OPENAI
             else response["completion"]
         )
         logger.debug("------- END RAW RESPONSE ----------")
@@ -210,7 +218,7 @@ class GPTJSON(Generic[SchemaType]):
 
         :return: yields `StreamingObject[SchemaType]`s.
         """
-        if self.model in [GPTModelVersion.CLAUD, GPTModelVersion.CLAUD_100K]:
+        if self.model_provider == ModelProvider.ANTHROPIC:
             raise NotImplementedError(
                 "For now, streaming is only supported for the OpenAI API."
             )
@@ -284,7 +292,7 @@ class GPTJSON(Generic[SchemaType]):
         Assumes one main block of results, either list of dictionary
 
         """
-        if self.model in [GPTModelVersion.GPT_3_5, GPTModelVersion.GPT_4]:
+        if self.model_provider == ModelProvider.OPENAI:
             choices = completion_response["choices"]
 
             if not choices:
@@ -292,7 +300,7 @@ class GPTJSON(Generic[SchemaType]):
                 return None, None
 
             full_response = choices[0]["message"]["content"]
-        elif self.model in [GPTModelVersion.CLAUD, GPTModelVersion.CLAUD_100K]:
+        elif self.model_provider == ModelProvider.ANTHROPIC:
             full_response = completion_response["completion"]
 
         extracted_response = find_json_response(full_response, extract_type)
@@ -331,22 +339,16 @@ class GPTJSON(Generic[SchemaType]):
 
         optional_parameters = {}
 
-        if max_response_tokens and self.model in [
-            GPTModelVersion.GPT_3_5,
-            GPTModelVersion.GPT_4,
-        ]:
+        if max_response_tokens and self.model_provider == ModelProvider.OPENAI:
             optional_parameters["max_tokens"] = max_response_tokens
-        elif self.model in [
-            GPTModelVersion.CLAUD,
-            GPTModelVersion.CLAUD_100K,
-        ]:
-            # need to specify a default for CLAUD models.
+        elif self.model_provider == ModelProvider.ANTHROPIC:
+            # need to specify a default for CLAUDE models.
             # using OpenAI's default of 16 tokens: https://platform.openai.com/docs/api-reference/completions/create#completions/create-max_tokens
             optional_parameters["max_tokens_to_sample"] = (
                 max_response_tokens if max_response_tokens else 16
             )
 
-        if self.model in [GPTModelVersion.GPT_3_5, GPTModelVersion.GPT_4]:
+        if self.model_provider == ModelProvider.OPENAI:
             return await openai.ChatCompletion.acreate(
                 model=self.model,
                 messages=[self.message_to_dict(message) for message in messages],
@@ -357,17 +359,17 @@ class GPTJSON(Generic[SchemaType]):
                 **optional_parameters,
                 **self.api_arguments,
             )
-        elif self.model in [GPTModelVersion.CLAUD, GPTModelVersion.CLAUD_100K]:
-            # format using Claud-mandated user prompt template
+        elif self.model_provider == ModelProvider.ANTHROPIC:
+            # format using Claude-mandated user prompt template
             # see more: https://console.anthropic.com/docs/api/reference#-v1-complete
-            formatted_claud_prompt = (
+            formatted_claude_prompt = (
                 f"{anthropic.HUMAN_PROMPT} {messages[0].content}{anthropic.AI_PROMPT}"
             )
             c = anthropic.Client(self.api_key)
             return await c.acompletion(
-                prompt=formatted_claud_prompt,
+                prompt=formatted_claude_prompt,
                 stop_sequences=[anthropic.HUMAN_PROMPT],
-                model="claude-v1",
+                model=self.model,
                 **optional_parameters,
                 **self.api_arguments,
             )

@@ -24,11 +24,26 @@ class GPTMessageRole(EnumSuper):
 
 
 @unique
+class ModelProvider(EnumSuper):
+    OPENAI = "oai"
+    ANTHROPIC = "anthropic"
+
+    @staticmethod
+    def get_provider(model: str):
+        if model.startswith("gpt-"):
+            return ModelProvider.OPENAI
+        elif model.startswith("claude-"):
+            return ModelProvider.ANTHROPIC
+        else:
+            raise ValueError(f"Unknown model {model}")
+
+
+@unique
 class GPTModelVersion(EnumSuper):
     GPT_3_5 = "gpt-3.5-turbo"
     GPT_4 = "gpt-4-0314"
-    CLAUD = "claud-v1"
-    CLAUD_100K = "claud-v1-100k"
+    CLAUDE = "claude-v1"
+    CLAUDE_100K = "claude-v1-100k"
 
 
 @unique
