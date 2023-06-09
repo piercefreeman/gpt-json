@@ -1,11 +1,12 @@
 import random
 from typing import Callable
 
-import anthropic
+import anthropic  # type: ignore
 import tiktoken
 
 from gpt_json.models import (
     GPTMessage,
+    GPTMessageRole,
     GPTModelVersion,
     ModelProvider,
     VariableTruncationMode,
@@ -20,7 +21,9 @@ def tokenize(text: str, model: str) -> list[int]:
         return [tok for tok in enc.encode(text)]
     elif model_provider == ModelProvider.ANTHROPIC:
         enc = anthropic.get_tokenizer()
-        return [tok for tok in enc.encode(text).ids]
+        return [tok for tok in enc.encode(text).ids]  # type: ignore
+    else:
+        raise ValueError(f"Unknown model {model}")
 
 
 def decode(tokens: list[int], model: str) -> str:
@@ -31,6 +34,8 @@ def decode(tokens: list[int], model: str) -> str:
     elif model_provider == ModelProvider.ANTHROPIC:
         enc = anthropic.get_tokenizer()
         return enc.decode(tokens)
+    else:
+        raise ValueError(f"Unknown model {model}")
 
 
 def gpt_message_markup_v1(messages: list[dict[str, str]], model: str) -> int:
@@ -59,7 +64,10 @@ def claude_message_markup_v1(messages: list[dict[str, str]], model: str) -> int:
     if not messages:
         return 0
 
-    gpt_messages = [GPTMessage(**message) for message in messages]
+    gpt_messages = [
+        GPTMessage(role=GPTMessageRole(message["role"]), content=message["content"])
+        for message in messages
+    ]
     return anthropic.count_tokens(messages_to_claude_prompt(gpt_messages))
 
 

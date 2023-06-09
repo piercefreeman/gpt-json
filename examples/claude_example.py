@@ -2,7 +2,6 @@ import asyncio
 import os
 from os import getenv
 
-import anthropic
 from dotenv import load_dotenv
 from pydantic import BaseModel
 

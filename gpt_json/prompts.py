@@ -1,7 +1,7 @@
 from types import UnionType
 from typing import List, Type, get_args, get_origin
 
-import anthropic
+import anthropic  # type: ignore
 from pydantic import BaseModel
 
 from gpt_json.models import GPTMessage, GPTMessageRole

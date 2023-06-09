@@ -15,7 +15,7 @@ from typing import (
     get_origin,
 )
 
-import anthropic
+import anthropic  # type: ignore
 import backoff
 import openai
 from openai.error import APIConnectionError, RateLimitError
@@ -42,7 +42,6 @@ from gpt_json.streaming import (
 )
 from gpt_json.transformations import fix_bools, fix_truncated_json
 from gpt_json.truncation import num_tokens_from_messages, truncate_tokens
-from gpt_json.types_anthropic import AnthropicCompletion
 from gpt_json.types_oai import ChatCompletionChunk
 
 logger = logging.getLogger("gptjson_logger")

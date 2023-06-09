@@ -3,11 +3,11 @@ from json import dumps as json_dumps
 from time import time
 from unittest.mock import AsyncMock, patch
 
-import anthropic
+import anthropic  # type: ignore
 import openai
 import pytest
-from pydantic import BaseModel, Field
 from openai.error import Timeout as OpenAITimeout
+from pydantic import BaseModel, Field
 
 from gpt_json.gpt import GPTJSON
 from gpt_json.models import FixTransforms, GPTMessage, GPTMessageRole, GPTModelVersion
