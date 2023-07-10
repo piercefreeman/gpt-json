@@ -1,7 +1,10 @@
 from types import UnionType
 from typing import List, Type, get_args, get_origin
 
+import anthropic  # type: ignore
 from pydantic import BaseModel
+
+from gpt_json.models import GPTMessage, GPTMessageRole
 
 
 def generate_schema_prompt(schema: Type[BaseModel] | list[Type[BaseModel]]) -> str:
@@ -54,3 +57,37 @@ def generate_schema_prompt(schema: Type[BaseModel] | list[Type[BaseModel]]) -> s
         )
     else:
         return generate_payload(schema)
+
+
+def messages_to_claude_prompt(messages: list[GPTMessage]) -> str:
+    """formatting details here: https://console.anthropic.com/docs/troubleshooting/checklist"""
+    if any(
+        [
+            m.role not in [GPTMessageRole.USER, GPTMessageRole.ASSISTANT]
+            for m in messages
+        ]
+    ):
+        raise ValueError("CLAUDE models only support User and Assistant messages.")
+    if [m.role for m in messages] != [
+        [GPTMessageRole.USER, GPTMessageRole.ASSISTANT][idx % 2]
+        for idx in range(len(messages))
+    ]:
+        raise ValueError(
+            "CLAUDE models require the first message to be a User message and alternate User/Assistant from there."
+        )
+    if messages[-1].role != GPTMessageRole.USER:
+        raise ValueError(
+            "CLAUDE models require specified messages to end with a User message."
+        )
+
+    gpt_role_to_prefix = {
+        GPTMessageRole.USER.value: anthropic.HUMAN_PROMPT,
+        GPTMessageRole.ASSISTANT.value: anthropic.AI_PROMPT,
+    }
+    base_prompt = "".join(
+        [
+            f"{gpt_role_to_prefix[message.role.value]} {message.content}"
+            for message in messages
+        ]
+    )
+    return base_prompt + anthropic.AI_PROMPT

@@ -3,10 +3,11 @@ from json import dumps as json_dumps
 from time import time
 from unittest.mock import AsyncMock, patch
 
+import anthropic  # type: ignore
 import openai
 import pytest
-from pydantic import BaseModel, Field
 from openai.error import Timeout as OpenAITimeout
+from pydantic import BaseModel, Field
 
 from gpt_json.gpt import GPTJSON
 from gpt_json.models import FixTransforms, GPTMessage, GPTMessageRole, GPTModelVersion
@@ -182,6 +183,53 @@ async def test_acreate(
 
     assert response == parsed
     assert transformations == expected_transformations
+
+
+@pytest.mark.asyncio
+async def test_anthropic_model():
+    model_version = GPTModelVersion.CLAUDE
+    messages = [
+        GPTMessage(
+            role=GPTMessageRole.USER,
+            content="Input prompt",
+        )
+    ]
+
+    class TestSchema(BaseModel):
+        text: str
+
+    model = GPTJSON[TestSchema](
+        None,
+        model=model_version,
+        temperature=0.0,
+        timeout=60,
+    )
+
+    # Define mock response
+    mock_response = {"completion": """{"text": "Test"} """, "stop_reason": "max_tokens"}
+
+    # Create the mock
+    with patch.object(anthropic.Client, "acompletion") as mock_acreate:
+        # Make the mock function asynchronous
+        mock_acreate.return_value = mock_response
+
+        # Call the function and pass the expected parameters
+        response, transformations = await model.run(
+            messages=messages, max_response_tokens=10
+        )
+
+        # Assert that the mock function was called with the expected parameters
+        mock_acreate.assert_called_with(
+            prompt=f"{anthropic.HUMAN_PROMPT} {messages[0].content}{anthropic.AI_PROMPT}",
+            stop_sequences=[anthropic.HUMAN_PROMPT],
+            model=model_version.value,
+            temperature=0.0,
+            stream=False,
+            max_tokens_to_sample=10,
+        )
+
+    assert response == TestSchema(text="Test")
+    assert transformations == FixTransforms()
 
 
 @pytest.mark.parametrize(

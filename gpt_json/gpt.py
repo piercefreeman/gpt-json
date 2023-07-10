@@ -15,6 +15,7 @@ from typing import (
     get_origin,
 )
 
+import anthropic  # type: ignore
 import backoff
 import openai
 from openai.error import APIConnectionError, RateLimitError
@@ -25,13 +26,15 @@ from tiktoken import encoding_for_model
 from gpt_json.models import (
     FixTransforms,
     GPTMessage,
+    GPTMessageRole,
     GPTModelVersion,
+    ModelProvider,
     ResponseType,
     TruncationOptions,
     VariableTruncationMode,
 )
 from gpt_json.parsers import find_json_response
-from gpt_json.prompts import generate_schema_prompt
+from gpt_json.prompts import generate_schema_prompt, messages_to_claude_prompt
 from gpt_json.streaming import (
     StreamingObject,
     parse_streamed_json,
@@ -78,12 +81,12 @@ class GPTJSON(Generic[SchemaType]):
         auto_trim_response_overhead: int = 0,
         # For messages that are relatively deterministic
         temperature=0.2,
+        api_max_retries=3,
         timeout: int | None = None,
-        openai_max_retries=3,
         **kwargs,
     ):
         """
-        :param api_key: OpenAI API key, if `OPENAI_API_KEY` environment variable is not set
+        :param api_key: OpenAI/Anthropic API key, if `OPENAI_API_KEY`/`ANTHROPIC_API_KEY` environment variable is not set
         :param model: GPTModelVersion or string model name
         :param auto_trim: If True, automatically trim messages to fit within the model's token limit
         :param auto_trim_response_overhead: If auto_trim is True, will leave at least `auto_trim_response_overhead` space
@@ -95,13 +98,20 @@ class GPTJSON(Generic[SchemaType]):
 
         """
         self.model = model.value if isinstance(model, GPTModelVersion) else model
+        self.model_provider = ModelProvider.get_provider(self.model)
         self.auto_trim = auto_trim
         self.temperature = temperature
         self.timeout = timeout
-        self.openai_max_retries = openai_max_retries
-        self.openai_arguments = kwargs
+        self.api_max_retries = api_max_retries
+        self.api_arguments = kwargs
         self.schema_model = self._cls_schema_model
         self.__class__._cls_schema_model = None
+
+        if "oai_max_retries" in kwargs:
+            logging.warn(
+                "oai_max_retries will be deprecated soon, please use api_max_retries instead."
+            )
+            self.api_max_retries = kwargs["oai_max_retries"]
 
         if not self.schema_model:
             raise ValueError(
@@ -117,17 +127,18 @@ class GPTJSON(Generic[SchemaType]):
                 "GPTJSON needs to be instantiated with either a pydantic.BaseModel schema or a list of those schemas."
             )
 
+        trim_tokens = auto_trim_response_overhead if auto_trim else 0
         if "gpt-4" in self.model:
-            self.max_tokens = (
-                8192 - auto_trim_response_overhead if self.auto_trim else 8192
-            )
+            self.max_tokens = 8192 - trim_tokens
         elif "gpt-3.5" in self.model:
-            self.max_tokens = (
-                4096 - auto_trim_response_overhead if self.auto_trim else 4096
-            )
+            self.max_tokens = 4096 - trim_tokens
+        elif "claude-v1" in self.model:
+            self.max_tokens = 9000 - trim_tokens
+        elif "claude-v1-100k" in self.model:
+            self.max_tokens = 100000 - trim_tokens
         else:
             raise ValueError(
-                "Unknown model to infer max tokens, see https://platform.openai.com/docs/models/gpt-4 for more information on token length."
+                "Unknown model to infer max tokens, see https://platform.openai.com/docs/models/gpt-4 or https://console.anthropic.com/docs/api/reference for more information on token length."
             )
 
         self.schema_prompt = generate_schema_prompt(self.schema_model)
@@ -161,7 +172,7 @@ class GPTJSON(Generic[SchemaType]):
         backoff_request_submission = backoff.on_exception(
             backoff.expo,
             (RateLimitError, OpenAITimeout, APIConnectionError),
-            max_tries=self.openai_max_retries,
+            max_tries=self.api_max_retries,
             on_backoff=handle_backoff,
         )(self.submit_request)
 
@@ -169,7 +180,11 @@ class GPTJSON(Generic[SchemaType]):
             messages, max_response_tokens=max_response_tokens
         )
         logger.debug("------- RAW RESPONSE ----------")
-        logger.debug(response["choices"])
+        logger.debug(
+            response["choices"]
+            if self.model_provider == ModelProvider.OPENAI
+            else response["completion"]
+        )
         logger.debug("------- END RAW RESPONSE ----------")
         extracted_json, fixed_payload = self.extract_json(response, self.extract_type)
 
@@ -202,6 +217,10 @@ class GPTJSON(Generic[SchemaType]):
 
         :return: yields `StreamingObject[SchemaType]`s.
         """
+        if self.model_provider == ModelProvider.ANTHROPIC:
+            raise NotImplementedError(
+                "For now, streaming is only supported for the OpenAI API."
+            )
         if self.extract_type != ResponseType.DICTIONARY:
             raise NotImplementedError(
                 "For now, streaming is only supported for dictionary responses."
@@ -222,7 +241,7 @@ class GPTJSON(Generic[SchemaType]):
         backoff_request_submission = backoff.on_exception(
             backoff.expo,
             (RateLimitError, OpenAITimeout, APIConnectionError),
-            max_tries=self.openai_max_retries,
+            max_tries=self.api_max_retries,
             on_backoff=handle_backoff,
         )(self.submit_request)
 
@@ -270,13 +289,16 @@ class GPTJSON(Generic[SchemaType]):
         """
         Assumes one main block of results, either list of dictionary
         """
-        choices = completion_response["choices"]
+        if self.model_provider == ModelProvider.OPENAI:
+            choices = completion_response["choices"]
 
-        if not choices:
-            logger.warning("No choices available, should report error...")
-            return None, None
+            if not choices:
+                logger.warning("No choices available, should report error...")
+                return None, None
 
-        full_response = choices[0]["message"]["content"]
+            full_response = choices[0]["message"]["content"]
+        elif self.model_provider == ModelProvider.ANTHROPIC:
+            full_response = completion_response["completion"]
 
         extracted_response = find_json_response(full_response, extract_type)
         if extracted_response is None:
@@ -318,18 +340,37 @@ class GPTJSON(Generic[SchemaType]):
 
         optional_parameters = {}
 
-        if max_response_tokens:
+        if max_response_tokens and self.model_provider == ModelProvider.OPENAI:
             optional_parameters["max_tokens"] = max_response_tokens
+        elif self.model_provider == ModelProvider.ANTHROPIC:
+            # need to specify a default for CLAUDE models.
+            # using OpenAI's default of 16 tokens: https://platform.openai.com/docs/api-reference/completions/create#completions/create-max_tokens
+            optional_parameters["max_tokens_to_sample"] = (
+                max_response_tokens if max_response_tokens else 16
+            )
 
-        execute_prediction = openai.ChatCompletion.acreate(
-            model=self.model,
-            messages=[self.message_to_dict(message) for message in messages],
-            temperature=self.temperature,
-            api_key=self.api_key,
-            stream=stream,
-            **optional_parameters,
-            **self.openai_arguments,
-        )
+        if self.model_provider == ModelProvider.OPENAI:
+            execute_prediction = openai.ChatCompletion.acreate(
+                model=self.model,
+                messages=[self.message_to_dict(message) for message in messages],
+                temperature=self.temperature,
+                api_key=self.api_key,
+                stream=stream,
+                **optional_parameters,
+                **self.api_arguments,
+            )
+        elif self.model_provider == ModelProvider.ANTHROPIC:
+            # format using Claude-mandated user prompt template
+            # see more: https://console.anthropic.com/docs/api/reference#-v1-complete
+            execute_prediction = anthropic.Client(self.api_key).acompletion(
+                prompt=messages_to_claude_prompt(messages),
+                stop_sequences=[anthropic.HUMAN_PROMPT],
+                model=self.model,
+                temperature=self.temperature,
+                stream=stream,
+                **optional_parameters,
+                **self.api_arguments,
+            )
 
         # The 'timeout' parameter supported by the OpenAI API is only used to cycle
         # the model while it's warming up

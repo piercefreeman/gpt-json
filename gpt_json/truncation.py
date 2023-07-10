@@ -1,19 +1,41 @@
 import random
 from typing import Callable
 
+import anthropic  # type: ignore
 import tiktoken
 
-from gpt_json.models import GPTModelVersion, VariableTruncationMode
+from gpt_json.models import (
+    GPTMessage,
+    GPTMessageRole,
+    GPTModelVersion,
+    ModelProvider,
+    VariableTruncationMode,
+)
+from gpt_json.prompts import messages_to_claude_prompt
 
 
 def tokenize(text: str, model: str) -> list[int]:
-    enc = tiktoken.encoding_for_model(model)
-    return [tok for tok in enc.encode(text)]
+    model_provider = ModelProvider.get_provider(model)
+    if model_provider == ModelProvider.OPENAI:
+        enc = tiktoken.encoding_for_model(model)
+        return [tok for tok in enc.encode(text)]
+    elif model_provider == ModelProvider.ANTHROPIC:
+        enc = anthropic.get_tokenizer()
+        return [tok for tok in enc.encode(text).ids]  # type: ignore
+    else:
+        raise ValueError(f"Unknown model {model}")
 
 
 def decode(tokens: list[int], model: str) -> str:
-    enc = tiktoken.encoding_for_model(model)
-    return enc.decode(tokens)
+    model_provider = ModelProvider.get_provider(model)
+    if model_provider == ModelProvider.OPENAI:
+        enc = tiktoken.encoding_for_model(model)
+        return enc.decode(tokens)
+    elif model_provider == ModelProvider.ANTHROPIC:
+        enc = anthropic.get_tokenizer()
+        return enc.decode(tokens)
+    else:
+        raise ValueError(f"Unknown model {model}")
 
 
 def gpt_message_markup_v1(messages: list[dict[str, str]], model: str) -> int:
@@ -35,9 +57,25 @@ def gpt_message_markup_v1(messages: list[dict[str, str]], model: str) -> int:
     return num_tokens
 
 
+def claude_message_markup_v1(messages: list[dict[str, str]], model: str) -> int:
+    """Converts a list of messages into the number of tokens used by the model, following the
+    markup rules for Anthropic's Claude models: https://console.anthropic.com/docs/troubleshooting/checklist.
+    """
+    if not messages:
+        return 0
+
+    gpt_messages = [
+        GPTMessage(role=GPTMessageRole(message["role"]), content=message["content"])
+        for message in messages
+    ]
+    return anthropic.count_tokens(messages_to_claude_prompt(gpt_messages))
+
+
 MODEL_MESSAGE_MARKUP = {
     GPTModelVersion.GPT_4.value: gpt_message_markup_v1,
     GPTModelVersion.GPT_3_5.value: gpt_message_markup_v1,
+    GPTModelVersion.CLAUDE.value: claude_message_markup_v1,
+    GPTModelVersion.CLAUDE_100K.value: claude_message_markup_v1,
 }
 
 
