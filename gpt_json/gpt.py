@@ -162,7 +162,7 @@ class GPTJSON(Generic[SchemaType]):
         max_response_tokens: int | None = None,
         format_variables: dict[str, Any] | None = None,
         truncation_options: TruncationOptions | None = None,
-    ) -> tuple[SchemaType | list[SchemaType], FixTransforms] | tuple[None, None]:
+    ) -> tuple[SchemaType, FixTransforms] | tuple[None, None]:
         """
         :param messages: List of GPTMessage objects to send to the API
         :param max_response_tokens: Maximum number of tokens allowed in the response

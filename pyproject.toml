@@ -7,7 +7,7 @@ readme = "README.md"
 packages = [{include = "gpt_json"}]
 
 [tool.poetry.dependencies]
-python = "^3.10"
+python = "^3.11"
 tiktoken = "^0.3.3"
 openai = "^0.27.6"
 pydantic = "^1.10.7"
