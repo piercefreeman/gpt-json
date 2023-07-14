@@ -1,11 +1,8 @@
 import asyncio
-import gzip
-import os
 import random
 from itertools import islice
 from os import getenv
 
-import requests
 from dotenv import load_dotenv
 from pydantic import BaseModel
 

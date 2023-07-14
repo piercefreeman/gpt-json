@@ -63,11 +63,13 @@ Detected sentiment: positive
 
 The `json_schema` is a special keyword that will be replaced with the schema definition at runtime. You should always include this in your payload to ensure the model knows how to format results. However, you can play around with _where_ to include this schema definition; in the system prompt, in the user prompt, at the beginning, or at the end.
 
-You can either typehint the model to return a BaseSchema back, or to provide a list of Multiple BaseSchema. Both of these work:
+You can either typehint the model to return a BaseSchema back, or to provide a list of multiple BaseSchema. Both of these work:
 
 ```python
+from gpt_json.gpt import GPTJSON, ListResponse
+
 gpt_json_single = GPTJSON[SentimentSchema](API_KEY)
-gpt_json_single = GPTJSON[list[SentimentSchema]](API_KEY)
+gpt_json_multiple = GPTJSON[ListResponse[SentimentSchema]](API_KEY)
 ```
 
 If you want to get more specific about how you expect the model to populate a field, add hints about the value through the "description" field. This helps the model understand what you're looking for, and will help it generate better results.

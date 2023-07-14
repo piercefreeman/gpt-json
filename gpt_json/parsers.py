@@ -12,11 +12,7 @@ def find_json_response(full_response, extract_type):
 
     """
     # Deal with fully included responses as well as truncated responses that only have one
-    if extract_type == ResponseType.LIST:
-        extracted_responses = list(
-            finditer(r"(\[[^\]]*$|\[.*\])", full_response, flags=DOTALL)
-        )
-    elif extract_type == ResponseType.DICTIONARY:
+    if extract_type == ResponseType.DICTIONARY:
         extracted_responses = list(
             finditer(r"({[^}]*$|{.*})", full_response, flags=DOTALL)
         )

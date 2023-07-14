@@ -5,10 +5,10 @@ from unittest.mock import AsyncMock, patch
 
 import openai
 import pytest
-from pydantic import BaseModel, Field
 from openai.error import Timeout as OpenAITimeout
+from pydantic import BaseModel, Field
 
-from gpt_json.gpt import GPTJSON
+from gpt_json.gpt import GPTJSON, ListResponse
 from gpt_json.models import FixTransforms, GPTMessage, GPTMessageRole, GPTModelVersion
 from gpt_json.tests.shared import MySchema, MySubSchema
 from gpt_json.transformations import JsonFixEnum
@@ -71,31 +71,35 @@ def test_cast_message_to_gpt_format(role_type: GPTMessageRole, expected: str):
             FixTransforms(),
         ),
         (
-            list[MySchema],
+            ListResponse[MySchema],
             """
             Your response is as follows:
-            [
-                {
-                    "text": "Test",
-                    "items": ["Item 1", "Item 2"],
-                    "numerical": 123,
-                    "sub_element": {
-                        "name": "Test"
-                    },
-                    "reason": true
-                }
-            ]
+            {
+                "items": [
+                    {
+                        "text": "Test",
+                        "items": ["Item 1", "Item 2"],
+                        "numerical": 123,
+                        "sub_element": {
+                            "name": "Test"
+                        },
+                        "reason": true
+                    }
+                ]
+            }
             Your response is above.
             """,
-            [
-                MySchema(
-                    text="Test",
-                    items=["Item 1", "Item 2"],
-                    numerical=123,
-                    sub_element=MySubSchema(name="Test"),
-                    reason=True,
-                )
-            ],
+            ListResponse(
+                items=[
+                    MySchema(
+                        text="Test",
+                        items=["Item 1", "Item 2"],
+                        numerical=123,
+                        sub_element=MySubSchema(name="Test"),
+                        reason=True,
+                    )
+                ]
+            ),
             FixTransforms(),
         ),
         (
