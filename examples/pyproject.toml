@@ -6,7 +6,7 @@ authors = ["Pierce Freeman <pierce@freeman.vc>"]
 readme = "README.md"
 
 [tool.poetry.dependencies]
-python = "^3.10"
+python = "^3.11"
 gpt_json = { path = "/Users/piercefreeman/projects/gpt-json", develop = true }
 python-dotenv = "^1.0.0"
 isort = "^5.12.0"
