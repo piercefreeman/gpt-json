@@ -8,19 +8,19 @@ from gpt_json.parsers import find_json_response
     "input_string,expected,extract_type",
     [
         (
-            'This message is truncated: [{"key1": [123]',
-            '[{"key1": [123]',
-            ResponseType.LIST,
+            'This message is truncated: {"items":[{"key1": [123]',
+            '{"items":[{"key1": [123]',
+            ResponseType.DICTIONARY,
         ),
         (
-            'This message is truncated: [{"key1": [123',
-            '[{"key1": [123',
-            ResponseType.LIST,
+            'This message is truncated: {"items":[{"key1": [123',
+            '{"items":[{"key1": [123',
+            ResponseType.DICTIONARY,
         ),
         (
-            'This message is truncated: [{"key1": "abc"',
-            '[{"key1": "abc"',
-            ResponseType.LIST,
+            'This message is truncated: {"items":[{"key1": "abc"',
+            '{"items":[{"key1": "abc"',
+            ResponseType.DICTIONARY,
         ),
         (
             'This message is truncated: {"key": "value", "list": [1, 2, 3',

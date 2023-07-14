@@ -1,7 +1,7 @@
 import sys
 from dataclasses import dataclass
 from enum import Enum, unique
-from typing import Callable, Iterator
+from typing import Callable
 
 if sys.version_info >= (3, 11):
     from enum import StrEnum
@@ -14,7 +14,6 @@ else:
 @unique
 class ResponseType(EnumSuper):
     DICTIONARY = "DICTIONARY"
-    LIST = "LIST"
 
 
 @unique

@@ -8,9 +8,9 @@ from typing import (
     Any,
     AsyncIterator,
     Generic,
-    List,
     Type,
     TypeVar,
+    cast,
     get_args,
     get_origin,
 )
@@ -19,16 +19,16 @@ import backoff
 import openai
 from openai.error import APIConnectionError, RateLimitError
 from openai.error import Timeout as OpenAITimeout
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from tiktoken import encoding_for_model
 
+from gpt_json.generics import resolve_generic_model
 from gpt_json.models import (
     FixTransforms,
     GPTMessage,
     GPTModelVersion,
     ResponseType,
     TruncationOptions,
-    VariableTruncationMode,
 )
 from gpt_json.parsers import find_json_response
 from gpt_json.prompts import generate_schema_prompt
@@ -56,9 +56,20 @@ def handle_backoff(details):
     )
 
 
+SCHEMA_PROMPT_TEMPLATE_KEY = "json_schema"
+
+
 SchemaType = TypeVar("SchemaType", bound=BaseModel)
 
-SCHEMA_PROMPT_TEMPLATE_KEY = "json_schema"
+
+class ListResponse(Generic[SchemaType], BaseModel):
+    """
+    Helper schema to echo back a list of input schemas
+    """
+
+    items: list[SchemaType] = Field(
+        description="Repeat for as many objects as are relevant"
+    )
 
 
 class GPTJSON(Generic[SchemaType]):
@@ -108,13 +119,25 @@ class GPTJSON(Generic[SchemaType]):
                 "GPTJSON needs to be instantiated with a schema model, like GPTJSON[MySchema](...args)."
             )
 
-        if get_origin(self.schema_model) in {list, List}:
-            self.extract_type = ResponseType.LIST
+        schema_origin = get_origin(self.schema_model)
+        schema_args = get_args(self.schema_model)
+
+        if (
+            schema_origin
+            and isinstance(schema_origin, type)
+            and all(isinstance(arg, type) for arg in schema_args)
+            and issubclass(schema_origin, BaseModel)
+            and all(issubclass(arg, BaseModel) for arg in schema_args)
+        ):
+            self.schema_model = cast(
+                Type[SchemaType], resolve_generic_model(self.schema_model)
+            )
+            self.extract_type = ResponseType.DICTIONARY
         elif issubclass(self.schema_model, BaseModel):
             self.extract_type = ResponseType.DICTIONARY
         else:
             raise ValueError(
-                "GPTJSON needs to be instantiated with either a pydantic.BaseModel schema or a list of those schemas."
+                "GPTJSON needs to be instantiated with a pydantic.BaseModel schema."
             )
 
         if "gpt-4" in self.model:
@@ -183,11 +206,7 @@ class GPTJSON(Generic[SchemaType]):
             )
 
         # Allow pydantic to handle the validation
-        if isinstance(extracted_json, list):
-            model = get_args(self.schema_model)[0]
-            return [model(**item) for item in extracted_json], fixed_payload
-        else:
-            return self.schema_model(**extracted_json), fixed_payload
+        return self.schema_model(**extracted_json), fixed_payload
 
     async def stream(
         self,
