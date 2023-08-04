@@ -17,6 +17,7 @@ from typing import (
 
 import backoff
 import openai
+from litellm import completion, acompletion
 from openai.error import APIConnectionError, RateLimitError
 from openai.error import Timeout as OpenAITimeout
 from pydantic import BaseModel, Field
@@ -95,7 +96,7 @@ class GPTJSON(Generic[SchemaType]):
     ):
         """
         :param api_key: OpenAI API key, if `OPENAI_API_KEY` environment variable is not set
-        :param model: GPTModelVersion or string model name
+        :param model: GPTModelVersion or string model name, see supported models here: https://litellm.readthedocs.io/en/latest/supported/
         :param auto_trim: If True, automatically trim messages to fit within the model's token limit
         :param auto_trim_response_overhead: If auto_trim is True, will leave at least `auto_trim_response_overhead` space
             for the output payload. For GPT, initial prompt + response <= allowed tokens.
@@ -340,7 +341,7 @@ class GPTJSON(Generic[SchemaType]):
         if max_response_tokens:
             optional_parameters["max_tokens"] = max_response_tokens
 
-        execute_prediction = openai.ChatCompletion.acreate(
+        execute_prediction = acompletion(
             model=self.model,
             messages=[self.message_to_dict(message) for message in messages],
             temperature=self.temperature,
