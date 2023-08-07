@@ -3,6 +3,8 @@ from typing import List, Type, get_args, get_origin
 
 from pydantic import BaseModel
 
+from gpt_json.common import get_field_description, get_model_fields
+
 
 def generate_schema_prompt(schema: Type[BaseModel]) -> str:
     """
@@ -13,8 +15,8 @@ def generate_schema_prompt(schema: Type[BaseModel]) -> str:
 
     def generate_payload(model: Type[BaseModel]):
         payload = []
-        for key, value in model.__fields__.items():
-            field_annotation = model.__annotations__[key]
+        for key, value in get_model_fields(model).items():
+            field_annotation = value.annotation
             annotation_origin = get_origin(field_annotation)
             annotation_arguments = get_args(field_annotation)
 
@@ -29,12 +31,12 @@ def generate_schema_prompt(schema: Type[BaseModel]) -> str:
                 payload.append(
                     f'"{key}": {" | ".join([arg.__name__.lower() for arg in annotation_arguments])}'
                 )
-            elif issubclass(value.type_, BaseModel):
-                payload.append(f'"{key}": {generate_payload(value.type_)}')
+            elif issubclass(field_annotation, BaseModel):
+                payload.append(f'"{key}": {generate_payload(field_annotation)}')
             else:
-                payload.append(f'"{key}": {value.type_.__name__.lower()}')
-            if value.field_info.description:
-                payload[-1] += f" // {value.field_info.description}"
+                payload.append(f'"{key}": {field_annotation.__name__.lower()}')
+            if get_field_description(value):
+                payload[-1] += f" // {get_field_description(value)}"
         # All brackets are double defined so they will passthrough a call to `.format()` where we
         # pass custom variables
         return "{{\n" + ",\n".join(payload) + "\n}}"
