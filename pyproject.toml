@@ -10,7 +10,7 @@ packages = [{include = "gpt_json"}]
 python = "^3.11"
 tiktoken = "^0.3.3"
 openai = "^0.27.6"
-pydantic = "^1.10.7"
+pydantic = ">1.10.7, <3.0.0"
 backoff = "^2.2.1"
 
 

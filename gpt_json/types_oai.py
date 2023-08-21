@@ -2,13 +2,13 @@ from pydantic import BaseModel
 
 
 class ChatCompletionDelta(BaseModel):
-    content: str | None
-    role: str | None
+    content: str | None = None
+    role: str | None = None
 
 
 class ChatCompletionChunkChoice(BaseModel):
     delta: ChatCompletionDelta
-    finish_reason: str | None
+    finish_reason: str | None = None
     index: int
 
 

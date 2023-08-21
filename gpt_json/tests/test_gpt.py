@@ -8,6 +8,7 @@ import pytest
 from openai.error import Timeout as OpenAITimeout
 from pydantic import BaseModel, Field
 
+from gpt_json.generics import resolve_generic_model
 from gpt_json.gpt import GPTJSON, ListResponse
 from gpt_json.models import FixTransforms, GPTMessage, GPTMessageRole, GPTModelVersion
 from gpt_json.tests.shared import MySchema, MySubSchema
@@ -89,7 +90,9 @@ def test_cast_message_to_gpt_format(role_type: GPTMessageRole, expected: str):
             }
             Your response is above.
             """,
-            ListResponse(
+            # Slight hack to work around ListResponse being a generic base that Pydantic can't
+            # otherwise validate / output to a dictionary
+            resolve_generic_model(ListResponse[MySchema])(
                 items=[
                     MySchema(
                         text="Test",
@@ -130,7 +133,10 @@ def test_cast_message_to_gpt_format(role_type: GPTMessageRole, expected: str):
     ],
 )
 async def test_acreate(
-    schema_typehint, response_raw, parsed, expected_transformations: FixTransforms
+    schema_typehint,
+    response_raw: str,
+    parsed: BaseModel,
+    expected_transformations: FixTransforms,
 ):
     model_version = GPTModelVersion.GPT_3_5
     messages = [
@@ -184,7 +190,8 @@ async def test_acreate(
             stream=False,
         )
 
-    assert response == parsed
+    assert response
+    assert response.dict() == parsed.dict()
     assert transformations == expected_transformations
 
 

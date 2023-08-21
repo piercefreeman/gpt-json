@@ -11,6 +11,7 @@ jobs:
     strategy:
       matrix:
         python: ["3.11"]
+        pydantic: ["1.10.12", "2.1.1"]
 
     steps:
       - uses: actions/checkout@v3
@@ -27,6 +28,10 @@ jobs:
         run: |
           export PATH="/Users/runner/.local/bin:$PATH"
           poetry install
+
+      - name: Install pydantic version
+        run: |
+          poetry add pydantic==${{ matrix.pydantic }}
 
       - name: Run tests
         run: |
