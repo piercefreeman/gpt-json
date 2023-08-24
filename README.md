@@ -10,6 +10,7 @@ Specifically this library:
 - Includes retry logic for the most common API failures
 - Formats the JSON schema as a flexible prompt that can be added into any message
 - Supports templating of prompts to allow for dynamic content
+- Enables typehinted function calls within the new GPT models, to better support agent creation
 
 ## Getting Started
 
@@ -135,6 +136,62 @@ response, _ = await gpt_json.run(
     format_variables={"sentiment": "happy", "max_items": 5},
 )
 ```
+
+## Function Calls
+
+`gpt-3.5-turbo-0613` and `gpt-4-0613` were fine-tuned to support a specific syntax for function calls. We support this syntax in `gpt-json` as well. Here's an example of how to use it:
+
+```python
+class UnitType(Enum):
+    CELSIUS = "celsius"
+    FAHRENHEIT = "fahrenheit"
+
+
+class GetCurrentWeatherRequest(BaseModel):
+    location: str = Field(description="The city and state, e.g. San Francisco, CA")
+    unit: UnitType | None = None
+
+
+class DataPayload(BaseModel):
+    data: str
+
+
+def get_current_weather(request: GetCurrentWeatherRequest):
+    """
+    Get the current weather in a given location
+    """
+    weather_info = {
+        "location": request.location,
+        "temperature": "72",
+        "unit": request.unit,
+        "forecast": ["sunny", "windy"],
+    }
+    return json_dumps(weather_info)
+
+
+async def runner():
+    gpt_json = GPTJSON[DataPayload](API_KEY, functions=[get_current_weather])
+    response = await gpt_json.run(
+        messages=[
+            GPTMessage(
+                role=GPTMessageRole.USER,
+                content="What's the weather like in Boston, in F?",
+            ),
+        ],
+    )
+
+    assert response.function_call == get_current_weather
+    assert response.function_arg == GetCurrentWeatherRequest(
+        location="Boston", unit=UnitType.FAHRENHEIT
+    )
+```
+
+The response provides the original function alongside a formatted Pydantic object. If users want to execute the function, they can run response.function_call(response.function_arg). We will parse the get_current_weather function and the GetCurrentWeatherRequest parameter into the format that GPT expects, so it is more likely to return you a correct function execution.
+
+GPT makes no guarantees about the validity of the returned functions. They could hallucinate a function name or the function signature. To address these cases, the run() function may now throw two new exceptions:
+
+`InvalidFunctionResponse` - The function name is incorrect.
+`InvalidFunctionParameters` - The function name is correct, but doesn't match the input schema that was provided.
 
 ## Other Configurations
 
