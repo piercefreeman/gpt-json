@@ -51,3 +51,12 @@ def parse_obj_model(model: Type[T], obj: dict[str, Any]) -> T:
         return model.model_validate(obj)
     else:
         raise ValueError(f"Unknown pydantic field class structure: {model}")
+
+
+def obj_to_json(model: T, **kwargs) -> str:
+    if hasattr(model, "json"):
+        return model.json(**kwargs)
+    elif hasattr(model, "model_dump_json"):
+        return model.model_dump_json(**kwargs)
+    else:
+        raise ValueError(f"Unknown pydantic field class structure: {model}")

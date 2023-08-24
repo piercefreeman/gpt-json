@@ -364,7 +364,9 @@ async def test_extracted_json_is_None():
     with patch.object(
         gpt,
         "submit_request",
-        return_value={"choices": [{"message": {"content": "some content"}}]},
+        return_value={
+            "choices": [{"message": {"content": "some content", "role": "assistant"}}]
+        },
     ), patch.object(
         gpt, "extract_json", return_value=(None, FixTransforms(None, False))
     ):
@@ -392,7 +394,9 @@ async def test_unable_to_find_valid_json_payload():
     with patch.object(
         gpt,
         "submit_request",
-        return_value={"choices": [{"message": {"content": "some content"}}]},
+        return_value={
+            "choices": [{"message": {"content": "some content", "role": "assistant"}}]
+        },
     ), patch.object(
         gpt, "extract_json", return_value=(None, FixTransforms(None, False))
     ):
