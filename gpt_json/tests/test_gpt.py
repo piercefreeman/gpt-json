@@ -368,7 +368,9 @@ async def test_extracted_json_is_None():
     ), patch.object(
         gpt, "extract_json", return_value=(None, FixTransforms(None, False))
     ):
-        result = await gpt.run([GPTMessage(GPTMessageRole.SYSTEM, "message content")])
+        result = await gpt.run(
+            [GPTMessage(role=GPTMessageRole.SYSTEM, content="message content")]
+        )
         assert result.response is None
 
 
@@ -377,7 +379,9 @@ async def test_no_valid_results_from_remote_request():
     gpt = GPTJSON[MySchema](None)
 
     with patch.object(gpt, "submit_request", return_value={"choices": []}):
-        result = await gpt.run([GPTMessage(GPTMessageRole.SYSTEM, "message content")])
+        result = await gpt.run(
+            [GPTMessage(role=GPTMessageRole.SYSTEM, content="message content")]
+        )
         assert result.response is None
 
 
@@ -392,7 +396,9 @@ async def test_unable_to_find_valid_json_payload():
     ), patch.object(
         gpt, "extract_json", return_value=(None, FixTransforms(None, False))
     ):
-        result = await gpt.run([GPTMessage(GPTMessageRole.SYSTEM, "message content")])
+        result = await gpt.run(
+            [GPTMessage(role=GPTMessageRole.SYSTEM, content="message content")]
+        )
         assert result.response is None
 
 
@@ -445,7 +451,7 @@ async def test_timeout():
 
         with pytest.raises(OpenAITimeout):
             await gpt.run(
-                [GPTMessage(GPTMessageRole.SYSTEM, "message content")],
+                [GPTMessage(role=GPTMessageRole.SYSTEM, content="message content")],
             )
 
         end_time = time()

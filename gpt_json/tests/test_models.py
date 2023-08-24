@@ -4,6 +4,7 @@ from enum import Enum
 import pytest
 
 import gpt_json.models as models_file
+from gpt_json.models import GPTMessage, GPTMessageRole
 
 
 @pytest.mark.parametrize("model_file", [models_file])
@@ -26,3 +27,24 @@ def test_string_enums(model_file):
 
         # Every file listed in pytest should have at least one enum
         assert found_enums > 0, f"No enums found in {model_file}"
+
+
+def test_gpt_message_validates_function():
+    with pytest.raises(ValueError):
+        GPTMessage(
+            role=GPTMessageRole.SYSTEM,
+            name="function_name",
+            content="function_content",
+        )
+
+    with pytest.raises(ValueError):
+        GPTMessage(
+            role=GPTMessageRole.FUNCTION,
+            content="function_content",
+        )
+
+    GPTMessage(
+        role=GPTMessageRole.FUNCTION,
+        name="function_name",
+        content="function_content",
+    )

@@ -3,6 +3,8 @@ from dataclasses import dataclass
 from enum import Enum, unique
 from typing import Callable
 
+from pydantic import BaseModel, model_validator
+
 if sys.version_info >= (3, 11):
     from enum import StrEnum
 
@@ -30,6 +32,7 @@ class GPTMessageRole(EnumSuper):
     SYSTEM = "system"
     USER = "user"
     ASSISTANT = "assistant"
+    FUNCTION = "function"
 
 
 @unique
@@ -56,14 +59,24 @@ class FixTransforms:
     fixed_bools: bool = False
 
 
-@dataclass
-class GPTMessage:
+class GPTMessage(BaseModel):
     """
     A single message in the chat sequence
     """
 
     role: GPTMessageRole
     content: str
+
+    # Name is only supported if we're formatting a function message
+    name: str | None = None
+
+    @model_validator(mode="after")
+    def check_name_if_function(self):
+        if self.role == GPTMessageRole.FUNCTION and self.name is None:
+            raise ValueError("Must provide a name for function messages")
+        if self.role != GPTMessageRole.FUNCTION and self.name is not None:
+            raise ValueError("Cannot provide a name for non-function messages")
+        return self
 
 
 @dataclass

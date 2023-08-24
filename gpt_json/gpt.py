@@ -1,7 +1,7 @@
 import logging
 from asyncio import TimeoutError as AsyncTimeoutError
 from asyncio import wait_for
-from dataclasses import replace
+from copy import copy
 from json import loads as json_loads
 from json.decoder import JSONDecodeError
 from typing import (
@@ -545,10 +545,9 @@ class GPTJSON(Generic[SchemaType]):
         # have been left in the pydantic field typehints
         content = content.format(**format_variables)
 
-        return replace(
-            message,
-            content=content,
-        )
+        new_message = copy(message)
+        new_message.content = content
+        return new_message
 
     def message_to_dict(self, message: GPTMessage):
         return {"role": message.role.value, "content": message.content}
@@ -590,13 +589,11 @@ class GPTJSON(Generic[SchemaType]):
                 break
 
         # Recreate the messages with our new text
-        new_messages = [
-            replace(
-                messages[i],
-                content=content,
-            )
-            for i, content in enumerate(filtered_messages)
-        ]
+        new_messages = []
+        for i, content in enumerate(filtered_messages):
+            new_message = copy(messages[i])
+            new_message.content = content
+            new_messages.append(new_message)
 
         # Log a copy of the message array if we have to crop it
         if current_token_count != original_token_count:
