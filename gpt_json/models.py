@@ -70,13 +70,17 @@ class GPTMessage(BaseModel):
     """
 
     role: GPTMessageRole
-    content: str
+    content: str | None
 
     # Name is only supported if we're formatting a function message
     name: str | None = None
 
     # Message from the server
     function_call: FunctionCall | None = None
+
+    # If enabled, gpt-json will attempt to format the message with the runtime variables
+    # Disable this in cases where you want the message to be formatted 1:1 with the input
+    allow_templating: bool = True
 
     @model_validator(mode="after")
     def check_name_if_function(self):

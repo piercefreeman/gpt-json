@@ -252,6 +252,9 @@ class GPTJSON(Generic[SchemaType]):
             except (ValueError, ValidationError):
                 raise InvalidFunctionParameters(function_name, function_args_string)
 
+        raw_response = parse_obj_model(GPTMessage, response_message)
+        raw_response.allow_templating = False
+
         extracted_json, fixed_payload = self.extract_json(
             response_message, self.extract_type
         )
@@ -259,7 +262,7 @@ class GPTJSON(Generic[SchemaType]):
         # Cast to schema model
         if extracted_json is None:
             return RunResponse(
-                raw_response=parse_obj_model(GPTMessage, response_message),
+                raw_response=raw_response,
                 response=None,
                 fix_transforms=fixed_payload,
                 function_call=function_call,
@@ -273,7 +276,7 @@ class GPTJSON(Generic[SchemaType]):
 
         # Allow pydantic to handle the validation
         return RunResponse(
-            raw_response=parse_obj_model(GPTMessage, response_message),
+            raw_response=raw_response,
             response=self.schema_model(**extracted_json),
             fix_transforms=fixed_payload,
             function_call=function_call,
@@ -538,6 +541,9 @@ class GPTJSON(Generic[SchemaType]):
             SCHEMA_PROMPT_TEMPLATE_KEY: self.schema_prompt,
         }
 
+        if message.content is None or not message.allow_templating:
+            return message
+
         # Regular quotes should passthrough to the next stage, except for our special keys
         content = message.content.replace("{", "{{").replace("}", "}}")
         for key in auto_format.keys():
@@ -567,7 +573,7 @@ class GPTJSON(Generic[SchemaType]):
         Returns:
             list: A list of messages with a total token count less than n tokens.
         """
-        message_text = [message.content for message in messages]
+        message_text = [message.content for message in messages if message.content]
 
         enc = encoding_for_model("gpt-4")
         filtered_messages = []
