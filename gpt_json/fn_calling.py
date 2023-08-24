@@ -99,9 +99,15 @@ def get_base_type(field_type):
 
 def resolve_refs(schema, defs=None):
     """
-    Given a JSON-Schema, resolve all $ref references to their definitions. This is supported
-    by the OpenAPI spec, but not by Pydantic. It makes for a cleaner API definition for use in
-    the GPT API.
+    Given a JSON-Schema, replace all $ref references to their definitions.
+
+    When JSON Schemas are exported by pydantic, use of nested fields (like enums) will be defined
+    in a separate $defs lookup table. This is a valid OpenAPI schema but makes for a less-obvious
+    definition for the GPT API. Additionally, none of the docs use the $defs format, so conceivably
+    the model was not fine-tuned on this particular format.
+
+    This function takes a schema complete with $defs and resolves all the references to their
+    full definition. The resulting payload is what we send to the GPT API.
 
     """
     if defs is None:

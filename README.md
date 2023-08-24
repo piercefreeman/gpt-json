@@ -39,7 +39,7 @@ Respond with the following JSON schema:
 
 async def runner():
     gpt_json = GPTJSON[SentimentSchema](API_KEY)
-    response, _ = await gpt_json.run(
+    payload = await gpt_json.run(
         messages=[
             GPTMessage(
                 role=GPTMessageRole.SYSTEM,
@@ -51,8 +51,8 @@ async def runner():
             )
         ]
     )
-    print(response)
-    print(f"Detected sentiment: {response.sentiment}")
+    print(payload.response)
+    print(f"Detected sentiment: {payload.response.sentiment}")
 
 asyncio.run(runner())
 ```
@@ -102,7 +102,7 @@ Generate fictitious quotes that are {sentiment}.
 """
 
 gpt_json = GPTJSON[QuoteSchema](API_KEY)
-response, _ = await gpt_json.run(
+response = await gpt_json.run(
     messages=[
         GPTMessage(
             role=GPTMessageRole.SYSTEM,
@@ -126,7 +126,7 @@ Generate fictitious quotes that are {sentiment}.
 """
 
 gpt_json = GPTJSON[QuoteSchema](API_KEY)
-response, _ = await gpt_json.run(
+response = await gpt_json.run(
     messages=[
         GPTMessage(
             role=GPTMessageRole.SYSTEM,
@@ -214,9 +214,9 @@ GPT (especially GPT-4) is relatively good at formatting responses at JSON, but i
 When calling `gpt_json.run()`, we return a tuple of values:
 
 ```python
-response, transformations = await gpt_json.run(...)
+payload = await gpt_json.run(...)
 
-print(transformations)
+print(transformations.fix_transforms)
 ```
 
 ```bash
