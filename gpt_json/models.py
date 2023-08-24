@@ -34,8 +34,8 @@ class GPTMessageRole(EnumSuper):
 
 @unique
 class GPTModelVersion(EnumSuper):
-    GPT_3_5 = "gpt-3.5-turbo"
-    GPT_4 = "gpt-4-0314"
+    GPT_3_5 = "gpt-3.5-turbo-0613"
+    GPT_4 = "gpt-4-0613"
 
 
 @unique

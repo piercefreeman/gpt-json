@@ -173,7 +173,7 @@ async def test_acreate(
         mock_acreate.return_value = mock_response
 
         # Call the function and pass the expected parameters
-        response, transformations = await model.run(messages=messages)
+        response = await model.run(messages=messages)
 
         # Assert that the mock function was called with the expected parameters
         mock_acreate.assert_called_with(
@@ -191,8 +191,9 @@ async def test_acreate(
         )
 
     assert response
-    assert response.dict() == parsed.dict()
-    assert transformations == expected_transformations
+    assert response.response
+    assert response.response.dict() == parsed.dict()
+    assert response.fix_transforms == expected_transformations
 
 
 @pytest.mark.parametrize(
@@ -287,10 +288,8 @@ async def test_extracted_json_is_None():
     ), patch.object(
         gpt, "extract_json", return_value=(None, FixTransforms(None, False))
     ):
-        result, _ = await gpt.run(
-            [GPTMessage(GPTMessageRole.SYSTEM, "message content")]
-        )
-        assert result is None
+        result = await gpt.run([GPTMessage(GPTMessageRole.SYSTEM, "message content")])
+        assert result.response is None
 
 
 @pytest.mark.asyncio
@@ -298,10 +297,8 @@ async def test_no_valid_results_from_remote_request():
     gpt = GPTJSON[MySchema](None)
 
     with patch.object(gpt, "submit_request", return_value={"choices": []}):
-        result, _ = await gpt.run(
-            [GPTMessage(GPTMessageRole.SYSTEM, "message content")]
-        )
-        assert result is None
+        result = await gpt.run([GPTMessage(GPTMessageRole.SYSTEM, "message content")])
+        assert result.response is None
 
 
 @pytest.mark.asyncio
@@ -315,10 +312,8 @@ async def test_unable_to_find_valid_json_payload():
     ), patch.object(
         gpt, "extract_json", return_value=(None, FixTransforms(None, False))
     ):
-        result, _ = await gpt.run(
-            [GPTMessage(GPTMessageRole.SYSTEM, "message content")]
-        )
-        assert result is None
+        result = await gpt.run([GPTMessage(GPTMessageRole.SYSTEM, "message content")])
+        assert result.response is None
 
 
 @pytest.mark.asyncio
