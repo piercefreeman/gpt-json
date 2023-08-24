@@ -37,8 +37,8 @@ async def runner():
             ),
         ]
     )
-    print(response)
-    print(f"Detected sentiment: {response.sentiment}")
+    print(response.response)
+    print(f"Detected sentiment: {response.response.sentiment}")
 
 
 asyncio.run(runner())
