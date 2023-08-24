@@ -4,8 +4,6 @@ from typing import Any, Callable, Dict, Optional, Type, Union, get_args, get_ori
 
 from pydantic import BaseModel
 
-from gpt_json.common import get_pydantic_version
-
 
 def parse_function(fn: Callable) -> Dict[str, Any]:
     """
@@ -17,11 +15,6 @@ def parse_function(fn: Callable) -> Dict[str, Any]:
     API Reference: https://platform.openai.com/docs/api-reference/chat/create
 
     """
-    if get_pydantic_version() < 2:
-        raise ValueError(
-            f"Function calling is only supported with Pydantic > 2, found {get_pydantic_version()}"
-        )
-
     docstring = getdoc(fn) or ""
     lines = docstring.strip().split("\n")
     description = lines[0] if lines else None

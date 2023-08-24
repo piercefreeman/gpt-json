@@ -8,7 +8,6 @@ import pytest
 from openai.error import Timeout as OpenAITimeout
 from pydantic import BaseModel, Field
 
-from gpt_json.common import get_pydantic_version
 from gpt_json.fn_calling import parse_function
 from gpt_json.generics import resolve_generic_model
 from gpt_json.gpt import GPTJSON, ListResponse
@@ -204,9 +203,6 @@ async def test_acreate(
     assert response.fix_transforms == expected_transformations
 
 
-@pytest.mark.skipif(
-    get_pydantic_version() < 2, reason="Pydantic 2+ required for function calls"
-)
 @pytest.mark.asyncio
 async def test_acreate_with_function_calls():
     model_version = GPTModelVersion.GPT_3_5

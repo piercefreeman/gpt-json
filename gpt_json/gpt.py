@@ -23,7 +23,6 @@ from openai.error import Timeout as OpenAITimeout
 from pydantic import BaseModel, Field, ValidationError
 from tiktoken import encoding_for_model
 
-from gpt_json.common import obj_to_json, parse_obj_model
 from gpt_json.exceptions import InvalidFunctionParameters, InvalidFunctionResponse
 from gpt_json.fn_calling import (
     function_to_name,
@@ -252,7 +251,7 @@ class GPTJSON(Generic[SchemaType]):
             except (ValueError, ValidationError):
                 raise InvalidFunctionParameters(function_name, function_args_string)
 
-        raw_response = parse_obj_model(GPTMessage, response_message)
+        raw_response = GPTMessage.model_validate(response_message)
         raw_response.allow_templating = False
 
         extracted_json, fixed_payload = self.extract_json(
@@ -559,8 +558,7 @@ class GPTJSON(Generic[SchemaType]):
         return new_message
 
     def message_to_dict(self, message: GPTMessage):
-        # return {"role": message.role.value, "content": message.content}
-        obj = json_loads(obj_to_json(message, exclude_unset=True))
+        obj = json_loads(message.model_dump_json(exclude_unset=True))
         obj.pop("allow_templating", None)
         return obj
 

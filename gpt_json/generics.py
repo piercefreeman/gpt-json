@@ -2,8 +2,6 @@ from typing import Any, Type, TypeVar, get_args, get_origin
 
 from pydantic import BaseModel, Field, create_model
 
-from gpt_json.common import get_model_field_infos
-
 
 def get_typevar_mapping(t: Any) -> dict[TypeVar, Any]:
     origin = get_origin(t)
@@ -52,7 +50,7 @@ def resolve_generic_model(t: Any) -> Type[BaseModel]:
         # Create a dict with all the fields from the original model
         fields = {}
         for name, type_ in base_model.__annotations__.items():
-            original_field = get_model_field_infos(base_model).get(name)
+            original_field = base_model.model_fields.get(name)
             if original_field:
                 fields[name] = (type_, original_field)
             else:

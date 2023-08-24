@@ -2,7 +2,6 @@ from typing import Callable, Optional, Union
 
 import pytest
 
-from gpt_json.common import get_pydantic_version
 from gpt_json.fn_calling import get_base_type, parse_function
 from gpt_json.tests.shared import (
     UnitType,
@@ -12,9 +11,6 @@ from gpt_json.tests.shared import (
 )
 
 
-@pytest.mark.skipif(
-    get_pydantic_version() < 2, reason="Pydantic 2+ required for function calls"
-)
 @pytest.mark.parametrize(
     "incorrect_fn",
     [
@@ -33,9 +29,6 @@ def test_get_base_type():
     assert get_base_type(Union[UnitType, None]) == UnitType
 
 
-@pytest.mark.skipif(
-    get_pydantic_version() < 2, reason="Pydantic 2+ required for function calls"
-)
 def test_parse_function():
     """
     Assert the formatted schema conforms to the expected JSON-Schema / GPT format.
