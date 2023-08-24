@@ -229,6 +229,9 @@ class GPTJSON(Generic[SchemaType]):
                 function_arg=None,
             )
 
+        function_call: Callable[..., BaseModel] | None = None
+        function_parsed: BaseModel | None = None
+
         if response_message.get("function_call"):
             function_name = response_message["function_call"]["name"]
             function_args_string = response_message["function_call"]["arguments"]
@@ -246,13 +249,6 @@ class GPTJSON(Generic[SchemaType]):
             except (ValueError, ValidationError):
                 raise InvalidFunctionParameters(function_name, function_args_string)
 
-            return RunResponse(
-                response=None,
-                fix_transforms=None,
-                function_call=function_call,
-                function_arg=function_parsed,
-            )
-
         extracted_json, fixed_payload = self.extract_json(
             response_message, self.extract_type
         )
@@ -262,8 +258,8 @@ class GPTJSON(Generic[SchemaType]):
             return RunResponse(
                 response=None,
                 fix_transforms=fixed_payload,
-                function_call=None,
-                function_arg=None,
+                function_call=function_call,
+                function_arg=function_parsed,
             )
 
         if not self.schema_model:
@@ -275,8 +271,8 @@ class GPTJSON(Generic[SchemaType]):
         return RunResponse(
             response=self.schema_model(**extracted_json),
             fix_transforms=fixed_payload,
-            function_call=None,
-            function_arg=None,
+            function_call=function_call,
+            function_arg=function_parsed,
         )
 
     async def stream(
@@ -365,6 +361,8 @@ class GPTJSON(Generic[SchemaType]):
         """
 
         full_response = response_message["content"]
+        if not full_response:
+            return None, None
 
         extracted_response = find_json_response(full_response, extract_type)
         if extracted_response is None:

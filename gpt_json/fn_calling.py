@@ -62,12 +62,16 @@ def get_argument_for_function(fn: Callable) -> Type[BaseModel]:
 
     # Determine if we only have one parameter
     if len(parameters) != 1:
-        raise ValueError("Only one argument is allowed as the function input")
+        raise ValueError(
+            f"Only one argument is allowed as the function input: {fn} {parameters}"
+        )
 
     # Get the parameter type
     parameter_type = parameters[0].annotation
     if not issubclass(parameter_type, BaseModel):
-        raise ValueError("Only Pydantic objects are allowed as function inputs")
+        raise ValueError(
+            f"Only Pydantic objects are allowed as function inputs: {fn} {parameter_type}"
+        )
 
     return parameter_type
 
