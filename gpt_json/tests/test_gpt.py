@@ -8,10 +8,17 @@ import pytest
 from openai.error import Timeout as OpenAITimeout
 from pydantic import BaseModel, Field
 
+from gpt_json.fn_calling import parse_function
 from gpt_json.generics import resolve_generic_model
 from gpt_json.gpt import GPTJSON, ListResponse
 from gpt_json.models import FixTransforms, GPTMessage, GPTMessageRole, GPTModelVersion
-from gpt_json.tests.shared import MySchema, MySubSchema
+from gpt_json.tests.shared import (
+    GetCurrentWeatherRequest,
+    MySchema,
+    MySubSchema,
+    UnitType,
+    get_current_weather,
+)
 from gpt_json.transformations import JsonFixEnum
 
 
@@ -194,6 +201,73 @@ async def test_acreate(
     assert response.response
     assert response.response.dict() == parsed.dict()
     assert response.fix_transforms == expected_transformations
+
+
+@pytest.mark.asyncio
+async def test_acreate_with_function_calls():
+    model_version = GPTModelVersion.GPT_3_5
+    messages = [
+        GPTMessage(
+            role=GPTMessageRole.USER,
+            content="Input prompt",
+        )
+    ]
+
+    model = GPTJSON[MySchema](
+        None,
+        model=model_version,
+        temperature=0.0,
+        timeout=60,
+        functions=[get_current_weather],
+    )
+
+    mock_response = {
+        "choices": [
+            {
+                "message": {
+                    "role": "assistant",
+                    "content": "",
+                    "function_call": {
+                        "name": "get_current_weather",
+                        "arguments": json_dumps({
+                            "location": "Boston",
+                            "unit": "fahrenheit",
+                        }),
+                    },
+                },
+                "index": 0,
+                "finish_reason": "stop",
+            }
+        ]
+    }
+
+    with patch.object(openai.ChatCompletion, "acreate") as mock_acreate:
+        mock_acreate.return_value = mock_response
+
+        response = await model.run(messages=messages)
+
+        mock_acreate.assert_called_with(
+            model=model_version.value,
+            messages=[
+                {
+                    "role": message.role.value,
+                    "content": message.content,
+                }
+                for message in messages
+            ],
+            temperature=0.0,
+            api_key=None,
+            stream=False,
+            functions=[parse_function(get_current_weather)],
+            function_call="auto",
+        )
+
+    assert response
+    assert response.response is None
+    assert response.function_call == get_current_weather
+    assert response.function_arg == GetCurrentWeatherRequest(
+        location="Boston", unit=UnitType.FAHRENHEIT
+    )
 
 
 @pytest.mark.parametrize(

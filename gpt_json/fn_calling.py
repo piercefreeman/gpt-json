@@ -1,18 +1,7 @@
 from dataclasses import dataclass
-from enum import Enum
 from inspect import getdoc, signature
 from types import UnionType
-from typing import (
-    Any,
-    Callable,
-    Dict,
-    List,
-    Optional,
-    Type,
-    Union,
-    get_args,
-    get_origin,
-)
+from typing import Any, Callable, Dict, Optional, Type, Union, get_args, get_origin
 
 from pydantic import BaseModel
 
