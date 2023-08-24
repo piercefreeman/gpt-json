@@ -2,6 +2,7 @@ import logging
 from asyncio import TimeoutError as AsyncTimeoutError
 from asyncio import wait_for
 from copy import copy
+from json import dumps as json_dumps
 from json import loads as json_loads
 from json.decoder import JSONDecodeError
 from typing import (
@@ -64,6 +65,7 @@ def handle_backoff(details):
 
 
 SCHEMA_PROMPT_TEMPLATE_KEY = "json_schema"
+SCHEMA_PROMPT_FUNCTION_KEY = "functions"
 
 
 SchemaType = TypeVar("SchemaType", bound=BaseModel)
@@ -538,6 +540,9 @@ class GPTJSON(Generic[SchemaType]):
     ):
         auto_format = {
             SCHEMA_PROMPT_TEMPLATE_KEY: self.schema_prompt,
+            SCHEMA_PROMPT_FUNCTION_KEY: json_dumps(
+                [function_to_name(fn) for fn in self.functions.values()]
+            ),
         }
 
         if message.content is None or not message.allow_templating:

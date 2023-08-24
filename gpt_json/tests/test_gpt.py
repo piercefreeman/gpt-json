@@ -334,7 +334,7 @@ def test_two_gptjsons():
     assert gptjson2.schema_model == TestSchema2
 
 
-def test_fill_message_template():
+def test_fill_message_schema_template():
     class TestTemplateSchema(BaseModel):
         template_field: str = Field(description="Max length {max_length}")
 
@@ -350,6 +350,23 @@ def test_fill_message_template():
     ) == GPTMessage(
         role=GPTMessageRole.USER,
         content='Variable: 100\nMy schema is here: {\n"template_field": str // Max length 100\n}',
+    )
+
+
+def test_fill_message_functions_template():
+    class TestTemplateSchema(BaseModel):
+        template_field: str = Field(description="Max length {max_length}")
+
+    gpt = GPTJSON[TestTemplateSchema](None, functions=[get_current_weather])
+    assert gpt.fill_message_template(
+        GPTMessage(
+            role=GPTMessageRole.USER,
+            content="Here are the functions available: {functions}",
+        ),
+        format_variables=dict(),
+    ) == GPTMessage(
+        role=GPTMessageRole.USER,
+        content='Here are the functions available: ["get_current_weather"]',
     )
 
 
