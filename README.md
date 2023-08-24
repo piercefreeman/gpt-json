@@ -10,7 +10,7 @@ Specifically this library:
 - Includes retry logic for the most common API failures
 - Formats the JSON schema as a flexible prompt that can be added into any message
 - Supports templating of prompts to allow for dynamic content
-- Enables typehinted function calls within the new GPT models, to better support agent creation
+- Validate typehinted function calls in the new GPT models, to better support agent creation
 
 ## Getting Started
 
