@@ -23,6 +23,7 @@ from openai.error import Timeout as OpenAITimeout
 from pydantic import BaseModel, Field, ValidationError
 from tiktoken import encoding_for_model
 
+from gpt_json.common import parse_obj_model
 from gpt_json.exceptions import InvalidFunctionParameters, InvalidFunctionResponse
 from gpt_json.fn_calling import (
     function_to_name,
@@ -84,6 +85,7 @@ class RunResponse(Generic[SchemaType], BaseModel):
     Helper schema to wrap a single response alongside the extracted metadata
     """
 
+    raw_response: GPTMessage | None
     response: SchemaType | None
     fix_transforms: FixTransforms | None
     function_call: Callable[..., BaseModel] | None
@@ -223,6 +225,7 @@ class GPTJSON(Generic[SchemaType]):
         response_message = self.extract_response_message(response)
         if response_message is None:
             return RunResponse(
+                raw_response=None,
                 response=None,
                 fix_transforms=None,
                 function_call=None,
@@ -256,6 +259,7 @@ class GPTJSON(Generic[SchemaType]):
         # Cast to schema model
         if extracted_json is None:
             return RunResponse(
+                raw_response=parse_obj_model(GPTMessage, response_message),
                 response=None,
                 fix_transforms=fixed_payload,
                 function_call=function_call,
@@ -269,6 +273,7 @@ class GPTJSON(Generic[SchemaType]):
 
         # Allow pydantic to handle the validation
         return RunResponse(
+            raw_response=parse_obj_model(GPTMessage, response_message),
             response=self.schema_model(**extracted_json),
             fix_transforms=fixed_payload,
             function_call=function_call,

@@ -59,6 +59,11 @@ class FixTransforms:
     fixed_bools: bool = False
 
 
+class FunctionCall(BaseModel):
+    arguments: str
+    name: str
+
+
 class GPTMessage(BaseModel):
     """
     A single message in the chat sequence
@@ -69,6 +74,9 @@ class GPTMessage(BaseModel):
 
     # Name is only supported if we're formatting a function message
     name: str | None = None
+
+    # Message from the server
+    function_call: FunctionCall | None = None
 
     @model_validator(mode="after")
     def check_name_if_function(self):
