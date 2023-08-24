@@ -6,7 +6,13 @@ that we do in GPT-JSON, but we can easily bridge some of the concepts in V1.
 
 from typing import Type
 
+from pkg_resources import get_distribution
 from pydantic import BaseModel
+
+
+def get_pydantic_version():
+    version = get_distribution("pydantic").version
+    return int(version.split(".")[0])
 
 
 def get_field_description(field):

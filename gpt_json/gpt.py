@@ -26,7 +26,7 @@ from tiktoken import encoding_for_model
 from gpt_json.exceptions import InvalidFunctionParameters, InvalidFunctionResponse
 from gpt_json.fn_calling import (
     function_to_name,
-    get_request_from_function,
+    get_argument_for_function,
     parse_function,
 )
 from gpt_json.generics import resolve_generic_model
@@ -236,11 +236,11 @@ class GPTJSON(Generic[SchemaType]):
                 raise InvalidFunctionResponse(function_name)
 
             function_call = self.functions[function_name]
-            function_request_model = get_request_from_function(function_call)
+            function_arg_model = get_argument_for_function(function_call)
 
             # Parameters are formatted as raw json strings
             try:
-                function_parsed = function_request_model.model_validate_json(
+                function_parsed = function_arg_model.model_validate_json(
                     function_args_string
                 )
             except (ValueError, ValidationError):

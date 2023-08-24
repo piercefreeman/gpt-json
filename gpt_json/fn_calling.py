@@ -4,30 +4,7 @@ from typing import Any, Callable, Dict, Optional, Type, Union, get_args, get_ori
 
 from pydantic import BaseModel
 
-
-def function_to_name(fn: Callable) -> str:
-    return fn.__name__
-
-
-def get_request_from_function(fn: Callable) -> Type[BaseModel]:
-    """
-    Parse the pydantic schema that is used as the only argument
-    for the functions.
-
-    """
-    # Parse the model inputs
-    parameters = list(signature(fn).parameters.values())
-
-    # Determine if we only have one parameter
-    if len(parameters) != 1:
-        raise ValueError("Only one Pydantic object is allowed to LLM function")
-
-    # Get the parameter type
-    parameter_type = parameters[0].annotation
-    if not issubclass(parameter_type, BaseModel):
-        raise ValueError("Only Pydantic objects are allowed to LLM function")
-
-    return parameter_type
+from gpt_json.common import get_pydantic_version
 
 
 def parse_function(fn: Callable) -> Dict[str, Any]:
@@ -40,15 +17,19 @@ def parse_function(fn: Callable) -> Dict[str, Any]:
     API Reference: https://platform.openai.com/docs/api-reference/chat/create
 
     """
+    if get_pydantic_version() < 2:
+        raise ValueError(
+            f"Function calling is only supported with Pydantic > 2, found {get_pydantic_version()}"
+        )
+
     docstring = getdoc(fn) or ""
     lines = docstring.strip().split("\n")
     description = lines[0] if lines else None
 
-    parameter_type = get_request_from_function(fn)
+    parameter_type = get_argument_for_function(fn)
 
     # Parse the parameter type into a JSON schema
     parameter_schema = model_to_parameter_schema(parameter_type)
-    print("parameter_schema", parameter_schema)
     return {
         "name": function_to_name(fn),
         "description": description,
@@ -56,7 +37,47 @@ def parse_function(fn: Callable) -> Dict[str, Any]:
     }
 
 
+def model_to_parameter_schema(model: Type[BaseModel]) -> Dict[str, Any]:
+    formatted_json = resolve_refs(model.model_json_schema())
+    return {
+        "type": "object",
+        "properties": formatted_json["properties"],
+        "required": formatted_json["required"],
+    }
+
+
+def function_to_name(fn: Callable) -> str:
+    return fn.__name__
+
+
+def get_argument_for_function(fn: Callable) -> Type[BaseModel]:
+    """
+    Function definitions are expected to have one argument, which is a pydantic BaseModel that captures
+    the input parameters and optional descriptions of the field values. This function
+    validates that the input function only has that one argument, and returns the type of that argument.
+
+    """
+    # Parse the model inputs
+    parameters = list(signature(fn).parameters.values())
+
+    # Determine if we only have one parameter
+    if len(parameters) != 1:
+        raise ValueError("Only one argument is allowed as the function input")
+
+    # Get the parameter type
+    parameter_type = parameters[0].annotation
+    if not issubclass(parameter_type, BaseModel):
+        raise ValueError("Only Pydantic objects are allowed as function inputs")
+
+    return parameter_type
+
+
 def get_base_type(field_type):
+    """
+    Given a type annotation that might be a Union or Optional, return the base type.
+    For instance, if the type is Union[None, int], return int.
+
+    """
     origin = get_origin(field_type)
     args = get_args(field_type)
 
@@ -80,6 +101,12 @@ def get_base_type(field_type):
 
 
 def resolve_refs(schema, defs=None):
+    """
+    Given a JSON-Schema, resolve all $ref references to their definitions. This is supported
+    by the OpenAPI spec, but not by Pydantic. It makes for a cleaner API definition for use in
+    the GPT API.
+
+    """
     if defs is None:
         defs = schema.get("$defs", {})
 
@@ -96,12 +123,3 @@ def resolve_refs(schema, defs=None):
         return [resolve_refs(item, defs) for item in schema]
 
     return schema
-
-
-def model_to_parameter_schema(model: Type[BaseModel]) -> Dict[str, Any]:
-    formatted_json = resolve_refs(model.model_json_schema())
-    return {
-        "type": "object",
-        "properties": formatted_json["properties"],
-        "required": formatted_json["required"],
-    }
