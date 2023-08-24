@@ -229,10 +229,12 @@ async def test_acreate_with_function_calls():
                     "content": "",
                     "function_call": {
                         "name": "get_current_weather",
-                        "arguments": json_dumps({
-                            "location": "Boston",
-                            "unit": "fahrenheit",
-                        }),
+                        "arguments": json_dumps(
+                            {
+                                "location": "Boston",
+                                "unit": "fahrenheit",
+                            }
+                        ),
                     },
                 },
                 "index": 0,

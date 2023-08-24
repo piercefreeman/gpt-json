@@ -1,15 +1,8 @@
-from dataclasses import dataclass
 from inspect import getdoc, signature
 from types import UnionType
 from typing import Any, Callable, Dict, Optional, Type, Union, get_args, get_origin
 
 from pydantic import BaseModel
-
-
-@dataclass
-class FunctionResponse:
-    caller_content: str
-    internal_context: Any
 
 
 def function_to_name(fn: Callable) -> str:
