@@ -35,7 +35,7 @@ def test_parse_function():
     """
     parse_function(get_current_weather) == {
         "name": "get_current_weather",
-        "description": "Get the current weather in a given location",
+        "description": "Get the current weather in a given location. Second line should also be included.",
         "parameters": {
             "type": "object",
             "properties": {

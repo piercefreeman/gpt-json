@@ -27,7 +27,8 @@ class GetCurrentWeatherRequest(BaseModel):
 
 def get_current_weather(request: GetCurrentWeatherRequest):
     """
-    Get the current weather in a given location
+    Get the current weather in a given location.
+    Second line should also be included.
 
     The rest of the docstring should be omitted.
     """
