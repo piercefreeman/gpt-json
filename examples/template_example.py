@@ -23,7 +23,7 @@ Generate fictitious quotes that are {sentiment}.
 
 async def runner():
     gpt_json = GPTJSON[QuoteSchema](API_KEY)
-    response, _ = await gpt_json.run(
+    response = await gpt_json.run(
         messages=[
             GPTMessage(
                 role=GPTMessageRole.SYSTEM,
@@ -33,8 +33,8 @@ async def runner():
         format_variables={"sentiment": "happy", "max_items": 5},
     )
 
-    print(response)
-    print(f"Quotes: {response.quotes}")
+    print(response.response)
+    print(f"Quotes: {response.response.quotes}")
 
 
 asyncio.run(runner())

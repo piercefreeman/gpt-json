@@ -3,6 +3,8 @@ from dataclasses import dataclass
 from enum import Enum, unique
 from typing import Callable
 
+from pydantic import BaseModel, model_validator
+
 if sys.version_info >= (3, 11):
     from enum import StrEnum
 
@@ -30,12 +32,13 @@ class GPTMessageRole(EnumSuper):
     SYSTEM = "system"
     USER = "user"
     ASSISTANT = "assistant"
+    FUNCTION = "function"
 
 
 @unique
 class GPTModelVersion(EnumSuper):
-    GPT_3_5 = "gpt-3.5-turbo"
-    GPT_4 = "gpt-4-0314"
+    GPT_3_5 = "gpt-3.5-turbo-0613"
+    GPT_4 = "gpt-4-0613"
 
 
 @unique
@@ -56,14 +59,36 @@ class FixTransforms:
     fixed_bools: bool = False
 
 
-@dataclass
-class GPTMessage:
+class FunctionCall(BaseModel):
+    arguments: str
+    name: str
+
+
+class GPTMessage(BaseModel):
     """
     A single message in the chat sequence
     """
 
     role: GPTMessageRole
-    content: str
+    content: str | None
+
+    # Name is only supported if we're formatting a function message
+    name: str | None = None
+
+    # Message from the server
+    function_call: FunctionCall | None = None
+
+    # If enabled, gpt-json will attempt to format the message with the runtime variables
+    # Disable this in cases where you want the message to be formatted 1:1 with the input
+    allow_templating: bool = True
+
+    @model_validator(mode="after")
+    def check_name_if_function(self):
+        if self.role == GPTMessageRole.FUNCTION and self.name is None:
+            raise ValueError("Must provide a name for function messages")
+        if self.role != GPTMessageRole.FUNCTION and self.name is not None:
+            raise ValueError("Cannot provide a name for non-function messages")
+        return self
 
 
 @dataclass

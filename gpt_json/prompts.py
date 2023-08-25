@@ -3,8 +3,6 @@ from typing import List, Type, get_args, get_origin
 
 from pydantic import BaseModel
 
-from gpt_json.common import get_field_description, get_model_fields
-
 
 def generate_schema_prompt(schema: Type[BaseModel]) -> str:
     """
@@ -15,12 +13,14 @@ def generate_schema_prompt(schema: Type[BaseModel]) -> str:
 
     def generate_payload(model: Type[BaseModel]):
         payload = []
-        for key, value in get_model_fields(model).items():
+        for key, value in model.model_fields.items():
             field_annotation = value.annotation
             annotation_origin = get_origin(field_annotation)
             annotation_arguments = get_args(field_annotation)
 
-            if annotation_origin in {list, List}:
+            if field_annotation is None:
+                continue
+            elif annotation_origin in {list, List}:
                 if issubclass(annotation_arguments[0], BaseModel):
                     payload.append(
                         f'"{key}": {generate_payload(annotation_arguments[0])}[]'
@@ -35,8 +35,8 @@ def generate_schema_prompt(schema: Type[BaseModel]) -> str:
                 payload.append(f'"{key}": {generate_payload(field_annotation)}')
             else:
                 payload.append(f'"{key}": {field_annotation.__name__.lower()}')
-            if get_field_description(value):
-                payload[-1] += f" // {get_field_description(value)}"
+            if value.description:
+                payload[-1] += f" // {value.description}"
         # All brackets are double defined so they will passthrough a call to `.format()` where we
         # pass custom variables
         return "{{\n" + ",\n".join(payload) + "\n}}"

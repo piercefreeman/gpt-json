@@ -1,12 +1,14 @@
 import logging
 from asyncio import TimeoutError as AsyncTimeoutError
 from asyncio import wait_for
-from dataclasses import replace
+from copy import copy
+from json import dumps as json_dumps
 from json import loads as json_loads
 from json.decoder import JSONDecodeError
 from typing import (
     Any,
     AsyncIterator,
+    Callable,
     Generic,
     Type,
     TypeVar,
@@ -19,9 +21,15 @@ import backoff
 import openai
 from openai.error import APIConnectionError, RateLimitError
 from openai.error import Timeout as OpenAITimeout
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ValidationError
 from tiktoken import encoding_for_model
 
+from gpt_json.exceptions import InvalidFunctionParameters, InvalidFunctionResponse
+from gpt_json.fn_calling import (
+    function_to_name,
+    get_argument_for_function,
+    parse_function,
+)
 from gpt_json.generics import resolve_generic_model
 from gpt_json.models import (
     FixTransforms,
@@ -57,6 +65,7 @@ def handle_backoff(details):
 
 
 SCHEMA_PROMPT_TEMPLATE_KEY = "json_schema"
+SCHEMA_PROMPT_FUNCTION_KEY = "functions"
 
 
 SchemaType = TypeVar("SchemaType", bound=BaseModel)
@@ -70,6 +79,18 @@ class ListResponse(Generic[SchemaType], BaseModel):
     items: list[SchemaType] = Field(
         description="Repeat for as many objects as are relevant"
     )
+
+
+class RunResponse(Generic[SchemaType], BaseModel):
+    """
+    Helper schema to wrap a single response alongside the extracted metadata
+    """
+
+    raw_response: GPTMessage | None
+    response: SchemaType | None
+    fix_transforms: FixTransforms | None
+    function_call: Callable[[BaseModel], Any] | None
+    function_arg: BaseModel | None
 
 
 class GPTJSON(Generic[SchemaType]):
@@ -87,6 +108,7 @@ class GPTJSON(Generic[SchemaType]):
         model: GPTModelVersion | str = GPTModelVersion.GPT_4,
         auto_trim: bool = False,
         auto_trim_response_overhead: int = 0,
+        functions: list[Callable[[Any], Any]] | None = None,
         # For messages that are relatively deterministic
         temperature=0.2,
         timeout: int | None = None,
@@ -112,6 +134,13 @@ class GPTJSON(Generic[SchemaType]):
         self.openai_max_retries = openai_max_retries
         self.openai_arguments = kwargs
         self.schema_model = self._cls_schema_model
+        self.functions = {
+            function_to_name(cast_fn): cast_fn
+            for fn in (functions or [])
+            # Use an explicit cast; Callable can't be typehinted with BaseModel directly
+            # because [BaseModel] is considered invariant with subclasses
+            for cast_fn in [cast(Callable[[BaseModel], Any], fn)]
+        }
         self.__class__._cls_schema_model = None
 
         if not self.schema_model:
@@ -162,7 +191,8 @@ class GPTJSON(Generic[SchemaType]):
         max_response_tokens: int | None = None,
         format_variables: dict[str, Any] | None = None,
         truncation_options: TruncationOptions | None = None,
-    ) -> tuple[SchemaType, FixTransforms] | tuple[None, None]:
+        allow_functions: bool = True,
+    ) -> RunResponse[SchemaType]:
         """
         :param messages: List of GPTMessage objects to send to the API
         :param max_response_tokens: Maximum number of tokens allowed in the response
@@ -189,16 +219,62 @@ class GPTJSON(Generic[SchemaType]):
         )(self.submit_request)
 
         response = await backoff_request_submission(
-            messages, max_response_tokens=max_response_tokens
+            messages,
+            max_response_tokens=max_response_tokens,
+            allow_functions=allow_functions,
         )
+
         logger.debug("------- RAW RESPONSE ----------")
         logger.debug(response["choices"])
         logger.debug("------- END RAW RESPONSE ----------")
-        extracted_json, fixed_payload = self.extract_json(response, self.extract_type)
+
+        # If the response requests a function call, prefer this over the main response
+        response_message = self.extract_response_message(response)
+        if response_message is None:
+            return RunResponse(
+                raw_response=None,
+                response=None,
+                fix_transforms=None,
+                function_call=None,
+                function_arg=None,
+            )
+
+        function_call: Callable[[BaseModel], Any] | None = None
+        function_parsed: BaseModel | None = None
+
+        if response_message.get("function_call"):
+            function_name = response_message["function_call"]["name"]
+            function_args_string = response_message["function_call"]["arguments"]
+            if function_name not in self.functions:
+                raise InvalidFunctionResponse(function_name)
+
+            function_call = self.functions[function_name]
+            function_arg_model = get_argument_for_function(function_call)
+
+            # Parameters are formatted as raw json strings
+            try:
+                function_parsed = function_arg_model.model_validate_json(
+                    function_args_string
+                )
+            except (ValueError, ValidationError):
+                raise InvalidFunctionParameters(function_name, function_args_string)
+
+        raw_response = GPTMessage.model_validate(response_message)
+        raw_response.allow_templating = False
+
+        extracted_json, fixed_payload = self.extract_json(
+            response_message, self.extract_type
+        )
 
         # Cast to schema model
         if extracted_json is None:
-            return None, None
+            return RunResponse(
+                raw_response=raw_response,
+                response=None,
+                fix_transforms=fixed_payload,
+                function_call=function_call,
+                function_arg=function_parsed,
+            )
 
         if not self.schema_model:
             raise ValueError(
@@ -206,7 +282,13 @@ class GPTJSON(Generic[SchemaType]):
             )
 
         # Allow pydantic to handle the validation
-        return self.schema_model(**extracted_json), fixed_payload
+        return RunResponse(
+            raw_response=raw_response,
+            response=self.schema_model(**extracted_json),
+            fix_transforms=fixed_payload,
+            function_call=function_call,
+            function_arg=function_parsed,
+        )
 
     async def stream(
         self,
@@ -246,7 +328,10 @@ class GPTJSON(Generic[SchemaType]):
         )(self.submit_request)
 
         raw_responses = await backoff_request_submission(
-            messages, max_response_tokens=max_response_tokens, stream=True
+            messages,
+            max_response_tokens=max_response_tokens,
+            stream=True,
+            allow_functions=False,
         )
 
         previous_partial = None
@@ -285,17 +370,14 @@ class GPTJSON(Generic[SchemaType]):
                 yield partial_response
                 previous_partial = partial_response
 
-    def extract_json(self, completion_response, extract_type: ResponseType):
+    def extract_json(self, response_message, extract_type: ResponseType):
         """
         Assumes one main block of results, either list of dictionary
         """
-        choices = completion_response["choices"]
 
-        if not choices:
-            logger.warning("No choices available, should report error...")
+        full_response = response_message["content"]
+        if not full_response:
             return None, None
-
-        full_response = choices[0]["message"]["content"]
 
         extracted_response = find_json_response(full_response, extract_type)
         if extracted_response is None:
@@ -319,10 +401,20 @@ class GPTJSON(Generic[SchemaType]):
             logger.error(f"JSON decode error, likely malformed json input: {e}")
             return None, fixed_payload
 
+    def extract_response_message(self, completion_response):
+        choices = completion_response["choices"]
+
+        if not choices:
+            logger.warning("No choices available, should report error...")
+            return None
+
+        return choices[0]["message"]
+
     async def submit_request(
         self,
         messages: list[GPTMessage],
         max_response_tokens: int | None,
+        allow_functions: bool,
         stream: bool = False,
     ):
         """
@@ -335,10 +427,16 @@ class GPTJSON(Generic[SchemaType]):
         if self.auto_trim:
             messages = self.trim_messages(messages, self.max_tokens)
 
-        optional_parameters = {}
+        optional_parameters: dict[str, Any] = {}
 
         if max_response_tokens:
             optional_parameters["max_tokens"] = max_response_tokens
+
+        if allow_functions and self.functions:
+            optional_parameters["functions"] = [
+                parse_function(fn) for fn in self.functions.values()
+            ]
+            optional_parameters["function_call"] = "auto"
 
         execute_prediction = openai.ChatCompletion.acreate(
             model=self.model,
@@ -448,7 +546,13 @@ class GPTJSON(Generic[SchemaType]):
     ):
         auto_format = {
             SCHEMA_PROMPT_TEMPLATE_KEY: self.schema_prompt,
+            SCHEMA_PROMPT_FUNCTION_KEY: json_dumps(
+                [function_to_name(fn) for fn in self.functions.values()]
+            ),
         }
+
+        if message.content is None or not message.allow_templating:
+            return message
 
         # Regular quotes should passthrough to the next stage, except for our special keys
         content = message.content.replace("{", "{{").replace("}", "}}")
@@ -460,13 +564,14 @@ class GPTJSON(Generic[SchemaType]):
         # have been left in the pydantic field typehints
         content = content.format(**format_variables)
 
-        return replace(
-            message,
-            content=content,
-        )
+        new_message = copy(message)
+        new_message.content = content
+        return new_message
 
     def message_to_dict(self, message: GPTMessage):
-        return {"role": message.role.value, "content": message.content}
+        obj = json_loads(message.model_dump_json(exclude_unset=True))
+        obj.pop("allow_templating", None)
+        return obj
 
     def trim_messages(self, messages: list[GPTMessage], n: int):
         """
@@ -480,7 +585,7 @@ class GPTJSON(Generic[SchemaType]):
         Returns:
             list: A list of messages with a total token count less than n tokens.
         """
-        message_text = [message.content for message in messages]
+        message_text = [message.content for message in messages if message.content]
 
         enc = encoding_for_model("gpt-4")
         filtered_messages = []
@@ -505,13 +610,11 @@ class GPTJSON(Generic[SchemaType]):
                 break
 
         # Recreate the messages with our new text
-        new_messages = [
-            replace(
-                messages[i],
-                content=content,
-            )
-            for i, content in enumerate(filtered_messages)
-        ]
+        new_messages = []
+        for i, content in enumerate(filtered_messages):
+            new_message = copy(messages[i])
+            new_message.content = content
+            new_messages.append(new_message)
 
         # Log a copy of the message array if we have to crop it
         if current_token_count != original_token_count:

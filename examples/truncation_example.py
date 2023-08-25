@@ -53,7 +53,7 @@ async def runner():
         return "\n".join(text.split("\n")[:-2])
 
     gpt_json = GPTJSON[SentimentSchema](API_KEY)
-    response, _ = await gpt_json.run(
+    response = await gpt_json.run(
         messages=[
             GPTMessage(
                 role=GPTMessageRole.SYSTEM,
@@ -76,7 +76,7 @@ async def runner():
         ),
     )
     print(response)
-    print(f"Detected sentiment: {response.sentiment}")
+    print(f"Detected sentiment: {response.response.sentiment}")
 
 
 asyncio.run(runner())

@@ -8,10 +8,17 @@ import pytest
 from openai.error import Timeout as OpenAITimeout
 from pydantic import BaseModel, Field
 
+from gpt_json.fn_calling import parse_function
 from gpt_json.generics import resolve_generic_model
 from gpt_json.gpt import GPTJSON, ListResponse
 from gpt_json.models import FixTransforms, GPTMessage, GPTMessageRole, GPTModelVersion
-from gpt_json.tests.shared import MySchema, MySubSchema
+from gpt_json.tests.shared import (
+    GetCurrentWeatherRequest,
+    MySchema,
+    MySubSchema,
+    UnitType,
+    get_current_weather,
+)
 from gpt_json.transformations import JsonFixEnum
 
 
@@ -173,7 +180,7 @@ async def test_acreate(
         mock_acreate.return_value = mock_response
 
         # Call the function and pass the expected parameters
-        response, transformations = await model.run(messages=messages)
+        response = await model.run(messages=messages)
 
         # Assert that the mock function was called with the expected parameters
         mock_acreate.assert_called_with(
@@ -191,8 +198,78 @@ async def test_acreate(
         )
 
     assert response
-    assert response.dict() == parsed.dict()
-    assert transformations == expected_transformations
+    assert response.response
+    assert response.response.dict() == parsed.dict()
+    assert response.fix_transforms == expected_transformations
+
+
+@pytest.mark.asyncio
+async def test_acreate_with_function_calls():
+    model_version = GPTModelVersion.GPT_3_5
+    messages = [
+        GPTMessage(
+            role=GPTMessageRole.USER,
+            content="Input prompt",
+        )
+    ]
+
+    model = GPTJSON[MySchema](
+        None,
+        model=model_version,
+        temperature=0.0,
+        timeout=60,
+        functions=[get_current_weather],
+    )
+
+    mock_response = {
+        "choices": [
+            {
+                "message": {
+                    "role": "assistant",
+                    "content": "",
+                    "function_call": {
+                        "name": "get_current_weather",
+                        "arguments": json_dumps(
+                            {
+                                "location": "Boston",
+                                "unit": "fahrenheit",
+                            }
+                        ),
+                    },
+                },
+                "index": 0,
+                "finish_reason": "stop",
+            }
+        ]
+    }
+
+    with patch.object(openai.ChatCompletion, "acreate") as mock_acreate:
+        mock_acreate.return_value = mock_response
+
+        response = await model.run(messages=messages)
+
+        mock_acreate.assert_called_with(
+            model=model_version.value,
+            messages=[
+                {
+                    "role": message.role.value,
+                    "content": message.content,
+                }
+                for message in messages
+            ],
+            temperature=0.0,
+            api_key=None,
+            stream=False,
+            functions=[parse_function(get_current_weather)],
+            function_call="auto",
+        )
+
+    assert response
+    assert response.response is None
+    assert response.function_call == get_current_weather
+    assert response.function_arg == GetCurrentWeatherRequest(
+        location="Boston", unit=UnitType.FAHRENHEIT
+    )
 
 
 @pytest.mark.parametrize(
@@ -257,7 +334,7 @@ def test_two_gptjsons():
     assert gptjson2.schema_model == TestSchema2
 
 
-def test_fill_message_template():
+def test_fill_message_schema_template():
     class TestTemplateSchema(BaseModel):
         template_field: str = Field(description="Max length {max_length}")
 
@@ -276,6 +353,23 @@ def test_fill_message_template():
     )
 
 
+def test_fill_message_functions_template():
+    class TestTemplateSchema(BaseModel):
+        template_field: str = Field(description="Max length {max_length}")
+
+    gpt = GPTJSON[TestTemplateSchema](None, functions=[get_current_weather])
+    assert gpt.fill_message_template(
+        GPTMessage(
+            role=GPTMessageRole.USER,
+            content="Here are the functions available: {functions}",
+        ),
+        format_variables=dict(),
+    ) == GPTMessage(
+        role=GPTMessageRole.USER,
+        content='Here are the functions available: ["get_current_weather"]',
+    )
+
+
 @pytest.mark.asyncio
 async def test_extracted_json_is_None():
     gpt = GPTJSON[MySchema](None)
@@ -283,14 +377,16 @@ async def test_extracted_json_is_None():
     with patch.object(
         gpt,
         "submit_request",
-        return_value={"choices": [{"message": {"content": "some content"}}]},
+        return_value={
+            "choices": [{"message": {"content": "some content", "role": "assistant"}}]
+        },
     ), patch.object(
         gpt, "extract_json", return_value=(None, FixTransforms(None, False))
     ):
-        result, _ = await gpt.run(
-            [GPTMessage(GPTMessageRole.SYSTEM, "message content")]
+        result = await gpt.run(
+            [GPTMessage(role=GPTMessageRole.SYSTEM, content="message content")]
         )
-        assert result is None
+        assert result.response is None
 
 
 @pytest.mark.asyncio
@@ -298,10 +394,10 @@ async def test_no_valid_results_from_remote_request():
     gpt = GPTJSON[MySchema](None)
 
     with patch.object(gpt, "submit_request", return_value={"choices": []}):
-        result, _ = await gpt.run(
-            [GPTMessage(GPTMessageRole.SYSTEM, "message content")]
+        result = await gpt.run(
+            [GPTMessage(role=GPTMessageRole.SYSTEM, content="message content")]
         )
-        assert result is None
+        assert result.response is None
 
 
 @pytest.mark.asyncio
@@ -311,14 +407,16 @@ async def test_unable_to_find_valid_json_payload():
     with patch.object(
         gpt,
         "submit_request",
-        return_value={"choices": [{"message": {"content": "some content"}}]},
+        return_value={
+            "choices": [{"message": {"content": "some content", "role": "assistant"}}]
+        },
     ), patch.object(
         gpt, "extract_json", return_value=(None, FixTransforms(None, False))
     ):
-        result, _ = await gpt.run(
-            [GPTMessage(GPTMessageRole.SYSTEM, "message content")]
+        result = await gpt.run(
+            [GPTMessage(role=GPTMessageRole.SYSTEM, content="message content")]
         )
-        assert result is None
+        assert result.response is None
 
 
 @pytest.mark.asyncio
@@ -370,7 +468,7 @@ async def test_timeout():
 
         with pytest.raises(OpenAITimeout):
             await gpt.run(
-                [GPTMessage(GPTMessageRole.SYSTEM, "message content")],
+                [GPTMessage(role=GPTMessageRole.SYSTEM, content="message content")],
             )
 
         end_time = time()
