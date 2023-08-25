@@ -26,12 +26,11 @@ class GetCurrentWeatherRequest(BaseModel):
 
 
 def get_current_weather(request: GetCurrentWeatherRequest):
-    """
-    Get the current weather in a given location.
-    Second line should also be included.
+    """Test description"""
 
-    The rest of the docstring should be omitted.
-    """
+
+async def get_current_weather_async(request: GetCurrentWeatherRequest):
+    """Test description"""
 
 
 def get_weather_additional_args(request: GetCurrentWeatherRequest, other_args: str):

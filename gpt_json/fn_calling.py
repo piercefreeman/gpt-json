@@ -15,11 +15,8 @@ def parse_function(fn: Callable) -> Dict[str, Any]:
     API Reference: https://platform.openai.com/docs/api-reference/chat/create
 
     """
-    docstring = getdoc(fn) or ""
-    lines = docstring.strip().split("\n")
-    description = lines[0] if lines else None
-
     parameter_type = get_argument_for_function(fn)
+    description = get_function_description(fn)
 
     # Parse the parameter type into a JSON schema
     parameter_schema = model_to_parameter_schema(parameter_type)
@@ -41,6 +38,32 @@ def model_to_parameter_schema(model: Type[BaseModel]) -> Dict[str, Any]:
 
 def function_to_name(fn: Callable) -> str:
     return fn.__name__
+
+
+def get_function_description(fn: Callable) -> str:
+    """
+    The description of a function is everything before an empty linebreak.
+
+    For instance:
+
+    ```
+    A
+    B
+
+    C
+    ```
+
+    Would return "A B"
+
+    """
+    docstring = getdoc(fn) or ""
+    lines = docstring.strip().split("\n")
+    description_lines = []
+    for line in lines:
+        if not line.strip():
+            break
+        description_lines.append(line.strip())
+    return " ".join(description_lines)
 
 
 def get_argument_for_function(fn: Callable) -> Type[BaseModel]:

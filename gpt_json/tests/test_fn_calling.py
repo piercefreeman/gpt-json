@@ -2,13 +2,28 @@ from typing import Callable, Optional, Union
 
 import pytest
 
-from gpt_json.fn_calling import get_base_type, parse_function
+from gpt_json.fn_calling import get_base_type, get_function_description, parse_function
 from gpt_json.tests.shared import (
     UnitType,
     get_current_weather,
+    get_current_weather_async,
     get_weather_additional_args,
     get_weather_no_pydantic,
 )
+
+
+def multi_line_description_fn():
+    """
+    Test
+    description
+
+    Hidden
+    description
+    """
+
+
+def single_line_description_fn():
+    """Test description"""
 
 
 @pytest.mark.parametrize(
@@ -29,18 +44,31 @@ def test_get_base_type():
     assert get_base_type(Union[UnitType, None]) == UnitType
 
 
-def test_parse_function():
+def test_get_function_description():
+    assert get_function_description(multi_line_description_fn) == "Test description"
+    assert get_function_description(single_line_description_fn) == "Test description"
+
+
+@pytest.mark.parametrize(
+    "function,expected_name",
+    [
+        (get_current_weather, "get_current_weather"),
+        (get_current_weather_async, "get_current_weather_async"),
+    ],
+)
+def test_parse_function(function, expected_name: str):
     """
     Assert the formatted schema conforms to the expected JSON-Schema / GPT format.
     """
-    parse_function(get_current_weather) == {
-        "name": "get_current_weather",
-        "description": "Get the current weather in a given location. Second line should also be included.",
+    assert parse_function(function) == {
+        "name": expected_name,
+        "description": "Test description",
         "parameters": {
             "type": "object",
             "properties": {
                 "location": {
                     "type": "string",
+                    "title": "Location",
                     "description": "The city and state, e.g. San Francisco, CA",
                 },
                 "unit": {
