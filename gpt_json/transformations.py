@@ -20,7 +20,6 @@ def build_stack(json_str):
             # closing a nested
             elif char in "}]":
                 if len(stack) == 0:
-                    print("will break")
                     break
                 stack.pop()
                 last_seen_comma_or_colon = None
@@ -108,7 +107,6 @@ def fix_truncated_json(json_str) -> tuple[str, JsonFixEnum | None]:
         close_stack = ["]" if char == "[" else "}" for char in stack]
         fixed_str += "".join(close_stack[::-1])
 
-    print("FIXED", fixed_str)
     # if the fixed string is valid JSON, return it
     fix = JsonFixEnum.UNCLOSED_OBJECT
     if open_quotes:

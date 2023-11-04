@@ -1,4 +1,5 @@
 from enum import Enum
+from typing import Literal
 
 from pydantic import BaseModel, Field
 
@@ -13,6 +14,12 @@ class MySchema(BaseModel):
     numerical: int | float
     sub_element: MySubSchema
     reason: bool = Field(description="Explanation")
+
+
+class LiteralSchema(BaseModel):
+    work_format: Literal["REMOTE", "OFFICE", "ANY"] = Field(
+        default="ANY", description="One of the given values"
+    )
 
 
 class UnitType(Enum):
