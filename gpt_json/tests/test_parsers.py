@@ -32,6 +32,11 @@ from gpt_json.parsers import find_json_response
             '{"text": "Test", "numerical": 123, "reason": true, "sub_element": { "name": "Test" }, "items": ["Item 1", "Item 2',
             ResponseType.DICTIONARY,
         ),
+        (
+            'This message has an additional closing bracket: {"text": "Test"}}',
+            '{"text": "Test"}}',
+            ResponseType.DICTIONARY,
+        ),
     ],
 )
 def test_find_json_response(input_string, expected, extract_type):

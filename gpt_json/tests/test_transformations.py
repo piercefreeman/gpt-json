@@ -114,6 +114,13 @@ def test_is_truncated(input_string: str, expected: bool):
             },
             JsonFixEnum.UNCLOSED_VALUE,
         ),
+        (
+            '{"text": "Test"}}',
+            {
+                "text": "Test",
+            },
+            JsonFixEnum.DROP_TRAILING_JSON,
+        ),
     ],
 )
 def test_fix_truncated_json(broken_string, expected, expected_fix_reason):

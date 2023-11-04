@@ -1,5 +1,5 @@
 from types import UnionType
-from typing import List, Type, get_args, get_origin
+from typing import List, Literal, Type, get_args, get_origin
 
 from pydantic import BaseModel
 
@@ -31,6 +31,9 @@ def generate_schema_prompt(schema: Type[BaseModel]) -> str:
                 payload.append(
                     f'"{key}": {" | ".join([arg.__name__.lower() for arg in annotation_arguments])}'
                 )
+            elif annotation_origin == Literal:
+                allowed_values = [f'"{arg}"' for arg in annotation_arguments]
+                payload.append(f'"{key}": {" | ".join(allowed_values)}')
             elif issubclass(field_annotation, BaseModel):
                 payload.append(f'"{key}": {generate_payload(field_annotation)}')
             else:

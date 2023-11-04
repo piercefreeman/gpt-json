@@ -5,7 +5,7 @@ import pytest
 from gpt_json.generics import resolve_generic_model
 from gpt_json.gpt import ListResponse
 from gpt_json.prompts import generate_schema_prompt
-from gpt_json.tests.shared import MySchema
+from gpt_json.tests.shared import LiteralSchema, MySchema
 
 
 def strip_whitespace(input_string: str):
@@ -42,6 +42,14 @@ def strip_whitespace(input_string: str):
                 }},
                 "reason": bool // Explanation            
             }}[] // Repeat for as many objects as are relevant
+            }}
+            """,
+        ),
+        (
+            LiteralSchema,
+            """
+            {{
+            "work_format": "REMOTE" | "OFFICE" | "ANY" // One of the given values
             }}
             """,
         ),
