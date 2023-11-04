@@ -48,6 +48,11 @@ class JsonFixEnum(EnumSuper):
     UNCLOSED_VALUE = "unclosed_value"
     MISSING_VALUE = "missing_value"
 
+    # Drop any additional JSON tags that occur after the main payload
+    # has been processed; this most often happens when the models spit back
+    # double close brackets like ]] or }}
+    DROP_TRAILING_JSON = "drop_trailing_json"
+
 
 @dataclass
 class FixTransforms:
