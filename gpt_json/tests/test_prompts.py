@@ -2,7 +2,6 @@ from re import sub
 
 import pytest
 
-from gpt_json.generics import resolve_generic_model
 from gpt_json.gpt import ListResponse
 from gpt_json.prompts import generate_schema_prompt
 from gpt_json.tests.shared import LiteralSchema, MySchema
@@ -40,7 +39,7 @@ def strip_whitespace(input_string: str):
                 "sub_element": {{
                     "name": str
                 }},
-                "reason": bool // Explanation            
+                "reason": bool // Explanation
             }}[] // Repeat for as many objects as are relevant
             }}
             """,
@@ -57,5 +56,5 @@ def strip_whitespace(input_string: str):
 )
 def test_generate_schema_prompt(schema_definition, expected: str):
     assert strip_whitespace(
-        generate_schema_prompt(resolve_generic_model(schema_definition))
+        generate_schema_prompt(schema_definition)
     ) == strip_whitespace(expected)

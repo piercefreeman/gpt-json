@@ -80,11 +80,11 @@ def prepare_streaming_object(
     value_change = None
     if event in [StreamEventEnum.KEY_UPDATED, StreamEventEnum.KEY_COMPLETED]:
         prev_value = (
-            previous_partial.partial_obj.dict()[updated_key]
+            previous_partial.partial_obj.model_dump()[updated_key]
             if previous_partial is not None and updated_key is not None
             else ""
         )
-        curr_value = partial_obj.dict().get(updated_key, "")
+        curr_value = partial_obj.model_dump().get(updated_key, "")
         if isinstance(prev_value, str) and isinstance(curr_value, str):
             value_change = curr_value.replace(prev_value, "")
         else:
