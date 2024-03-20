@@ -30,7 +30,6 @@ from gpt_json.fn_calling import (
     get_argument_for_function,
     parse_function,
 )
-from gpt_json.generics import resolve_generic_model
 from gpt_json.models import (
     FixTransforms,
     GPTMessage,
@@ -71,7 +70,7 @@ SCHEMA_PROMPT_FUNCTION_KEY = "functions"
 SchemaType = TypeVar("SchemaType", bound=BaseModel)
 
 
-class ListResponse(Generic[SchemaType], BaseModel):
+class ListResponse(BaseModel, Generic[SchemaType]):
     """
     Helper schema to echo back a list of input schemas
     """
@@ -81,7 +80,7 @@ class ListResponse(Generic[SchemaType], BaseModel):
     )
 
 
-class RunResponse(Generic[SchemaType], BaseModel):
+class RunResponse(BaseModel, Generic[SchemaType]):
     """
     Helper schema to wrap a single response alongside the extracted metadata
     """
@@ -158,9 +157,7 @@ class GPTJSON(Generic[SchemaType]):
             and issubclass(schema_origin, BaseModel)
             and all(issubclass(arg, BaseModel) for arg in schema_args)
         ):
-            self.schema_model = cast(
-                Type[SchemaType], resolve_generic_model(self.schema_model)
-            )
+            self.schema_model = self.schema_model
             self.extract_type = ResponseType.DICTIONARY
         elif issubclass(self.schema_model, BaseModel):
             self.extract_type = ResponseType.DICTIONARY
