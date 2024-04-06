@@ -18,9 +18,10 @@ from typing import (
 )
 
 import backoff
-import openai
-from openai.error import APIConnectionError, RateLimitError
-from openai.error import Timeout as OpenAITimeout
+from openai import AsyncOpenAI
+from openai._exceptions import APIConnectionError
+from openai._exceptions import APITimeoutError as OpenAITimeout
+from openai._exceptions import RateLimitError
 from pydantic import BaseModel, Field, ValidationError
 from tiktoken import encoding_for_model
 
@@ -103,7 +104,7 @@ class GPTJSON(Generic[SchemaType]):
 
     def __init__(
         self,
-        api_key: str | None = None,
+        api_key: str,
         model: GPTModelVersion | str = GPTModelVersion.GPT_4,
         auto_trim: bool = False,
         auto_trim_response_overhead: int = 0,
@@ -180,7 +181,7 @@ class GPTJSON(Generic[SchemaType]):
             )
 
         self.schema_prompt = generate_schema_prompt(self.schema_model)
-        self.api_key = api_key
+        self.client = AsyncOpenAI(api_key=api_key)
 
     async def run(
         self,
@@ -435,15 +436,22 @@ class GPTJSON(Generic[SchemaType]):
             ]
             optional_parameters["function_call"] = "auto"
 
-        execute_prediction = openai.ChatCompletion.acreate(
+        execute_prediction = self.client.chat.completions.create(
             model=self.model,
             messages=[self.message_to_dict(message) for message in messages],
             temperature=self.temperature,
-            api_key=self.api_key,
             stream=stream,
             **optional_parameters,
             **self.openai_arguments,
         )
+
+        # We can't combine streams (which return async generators) with timeouts, since our client
+        # functions expect us to return immediately
+        if self.timeout is not None and stream:
+            raise ValueError("Timeouts are not supported with streaming completions")
+
+        if stream:
+            return execute_prediction
 
         # The 'timeout' parameter supported by the OpenAI API is only used to cycle
         # the model while it's warming up
@@ -456,7 +464,9 @@ class GPTJSON(Generic[SchemaType]):
             try:
                 return await wait_for(execute_prediction, timeout=self.timeout)
             except AsyncTimeoutError:
-                raise OpenAITimeout
+                # We don't have access to the underlying httpx.Request, so we just return None in place
+                # of the request object
+                raise OpenAITimeout(None)  # type: ignore
 
     def fill_messages(
         self,

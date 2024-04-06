@@ -1,7 +1,6 @@
 import json
 from unittest.mock import patch
 
-import openai
 import pytest
 
 from gpt_json.gpt import GPTJSON
@@ -90,13 +89,6 @@ async def test_gpt_stream(
         )
     ]
 
-    model = GPTJSON[schema_typehint](  # type: ignore
-        None,
-        model=model_version,
-        temperature=0.0,
-        timeout=60,
-    )
-
     # Define mock response
     mocked_oai_raw_responses = _mock_oai_streaming_chunks(full_object)
 
@@ -107,9 +99,14 @@ async def test_gpt_stream(
     mock_response = async_list_to_generator(mocked_oai_raw_responses)
 
     # Create the mock
-    with patch.object(openai.ChatCompletion, "acreate") as mock_acreate:
-        # Make the mock function asynchronous
-        mock_acreate.return_value = mock_response
+    with patch("gpt_json.gpt.AsyncOpenAI") as mock_client:
+        mock_client.return_value.chat.completions.create.return_value = mock_response
+
+        model = GPTJSON[schema_typehint](  # type: ignore
+            api_key="TEST",
+            model=model_version,
+            temperature=0.0,
+        )
 
         if not should_support:
             with pytest.raises(NotImplementedError):
@@ -137,7 +134,7 @@ async def test_gpt_stream(
             idx += 1
 
         # Assert that the mock function was called with the expected parameters, including streaming
-        mock_acreate.assert_called_with(
+        mock_client.return_value.chat.completions.create.assert_called_with(
             model=model_version.value,
             messages=[
                 {
@@ -148,5 +145,4 @@ async def test_gpt_stream(
             ],
             temperature=0.0,
             stream=True,
-            api_key=None,
         )

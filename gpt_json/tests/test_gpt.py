@@ -3,9 +3,8 @@ from json import dumps as json_dumps
 from time import time
 from unittest.mock import AsyncMock, patch
 
-import openai
 import pytest
-from openai.error import Timeout as OpenAITimeout
+from openai._exceptions import APITimeoutError as OpenAITimeout
 from pydantic import BaseModel, Field
 
 from gpt_json.fn_calling import parse_function
@@ -25,7 +24,7 @@ def test_throws_error_if_no_model_specified():
     with pytest.raises(
         ValueError, match="needs to be instantiated with a schema model"
     ):
-        GPTJSON(None)
+        GPTJSON(api_key="TEST")
 
 
 @pytest.mark.parametrize(
@@ -37,7 +36,7 @@ def test_throws_error_if_no_model_specified():
     ],
 )
 def test_cast_message_to_gpt_format(role_type: GPTMessageRole, expected: str):
-    parser = GPTJSON[MySchema](None)
+    parser = GPTJSON[MySchema](api_key="TEST")
     assert (
         parser.message_to_dict(
             GPTMessage(
@@ -138,7 +137,7 @@ def test_cast_message_to_gpt_format(role_type: GPTMessageRole, expected: str):
         ),
     ],
 )
-async def test_acreate(
+async def test_create(
     schema_typehint,
     response_raw: str,
     parsed: BaseModel,
@@ -151,13 +150,6 @@ async def test_acreate(
             content="Input prompt",
         )
     ]
-
-    model = GPTJSON[schema_typehint](
-        None,
-        model=model_version,
-        temperature=0.0,
-        timeout=60,
-    )
 
     # Define mock response
     mock_response = {
@@ -173,16 +165,23 @@ async def test_acreate(
         ]
     }
 
-    # Create the mock
-    with patch.object(openai.ChatCompletion, "acreate") as mock_acreate:
-        # Make the mock function asynchronous
-        mock_acreate.return_value = mock_response
+    with patch("gpt_json.gpt.AsyncOpenAI") as mock_client:
+        mock_client.return_value.chat.completions.create = AsyncMock(
+            return_value=mock_response
+        )
+
+        model = GPTJSON[schema_typehint](
+            api_key="TEST",
+            model=model_version,
+            temperature=0.0,
+            timeout=60,
+        )
 
         # Call the function and pass the expected parameters
         response = await model.run(messages=messages)
 
         # Assert that the mock function was called with the expected parameters
-        mock_acreate.assert_called_with(
+        mock_client.return_value.chat.completions.create.assert_called_with(
             model=model_version.value,
             messages=[
                 {
@@ -192,7 +191,6 @@ async def test_acreate(
                 for message in messages
             ],
             temperature=0.0,
-            api_key=None,
             stream=False,
         )
 
@@ -203,7 +201,7 @@ async def test_acreate(
 
 
 @pytest.mark.asyncio
-async def test_acreate_with_function_calls():
+async def test_create_with_function_calls():
     model_version = GPTModelVersion.GPT_3_5
     messages = [
         GPTMessage(
@@ -211,14 +209,6 @@ async def test_acreate_with_function_calls():
             content="Input prompt",
         )
     ]
-
-    model = GPTJSON[MySchema](
-        None,
-        model=model_version,
-        temperature=0.0,
-        timeout=60,
-        functions=[get_current_weather],
-    )
 
     mock_response = {
         "choices": [
@@ -242,12 +232,22 @@ async def test_acreate_with_function_calls():
         ]
     }
 
-    with patch.object(openai.ChatCompletion, "acreate") as mock_acreate:
-        mock_acreate.return_value = mock_response
+    with patch("gpt_json.gpt.AsyncOpenAI") as mock_client:
+        mock_client.return_value.chat.completions.create = AsyncMock(
+            return_value=mock_response
+        )
+
+        model = GPTJSON[MySchema](
+            api_key="TEST",
+            model=model_version,
+            temperature=0.0,
+            timeout=60,
+            functions=[get_current_weather],
+        )
 
         response = await model.run(messages=messages)
 
-        mock_acreate.assert_called_with(
+        mock_client.return_value.chat.completions.create.assert_called_with(
             model=model_version.value,
             messages=[
                 {
@@ -257,7 +257,6 @@ async def test_acreate_with_function_calls():
                 for message in messages
             ],
             temperature=0.0,
-            api_key=None,
             stream=False,
             functions=[parse_function(get_current_weather)],
             function_call="auto",
@@ -299,7 +298,9 @@ async def test_acreate_with_function_calls():
     ],
 )
 def test_trim_messages(input_messages, expected_output_messages):
-    gpt = GPTJSON[MySchema](None, auto_trim=True, auto_trim_response_overhead=0)
+    gpt = GPTJSON[MySchema](
+        api_key="TEST", auto_trim=True, auto_trim_response_overhead=0
+    )
 
     output_messages = gpt.trim_messages(input_messages, n=8192)
 
@@ -319,7 +320,7 @@ def test_two_gptjsons():
     class TestSchema2(BaseModel):
         field2: str
 
-    gptjson1 = GPTJSON[TestSchema1](None)
+    gptjson1 = GPTJSON[TestSchema1](api_key="TRUE")
 
     # Shouldn't allow instantion without a schema
     # We already expect a mypy error here, which is why we need a `type ignore`
@@ -327,7 +328,7 @@ def test_two_gptjsons():
     with pytest.raises(ValueError):
         gptjson2 = GPTJSON(None)  # type: ignore
 
-    gptjson2 = GPTJSON[TestSchema2](None)
+    gptjson2 = GPTJSON[TestSchema2](api_key="TRUE")
 
     assert gptjson1.schema_model == TestSchema1
     assert gptjson2.schema_model == TestSchema2
@@ -337,7 +338,7 @@ def test_fill_message_schema_template():
     class TestTemplateSchema(BaseModel):
         template_field: str = Field(description="Max length {max_length}")
 
-    gpt = GPTJSON[TestTemplateSchema](None)
+    gpt = GPTJSON[TestTemplateSchema](api_key="TRUE")
     assert gpt.fill_message_template(
         GPTMessage(
             role=GPTMessageRole.USER,
@@ -356,7 +357,7 @@ def test_fill_message_functions_template():
     class TestTemplateSchema(BaseModel):
         template_field: str = Field(description="Max length {max_length}")
 
-    gpt = GPTJSON[TestTemplateSchema](None, functions=[get_current_weather])
+    gpt = GPTJSON[TestTemplateSchema](api_key="TRUE", functions=[get_current_weather])
     assert gpt.fill_message_template(
         GPTMessage(
             role=GPTMessageRole.USER,
@@ -371,7 +372,7 @@ def test_fill_message_functions_template():
 
 @pytest.mark.asyncio
 async def test_extracted_json_is_None():
-    gpt = GPTJSON[MySchema](None)
+    gpt = GPTJSON[MySchema](api_key="TRUE")
 
     with patch.object(
         gpt,
@@ -390,7 +391,7 @@ async def test_extracted_json_is_None():
 
 @pytest.mark.asyncio
 async def test_no_valid_results_from_remote_request():
-    gpt = GPTJSON[MySchema](None)
+    gpt = GPTJSON[MySchema](api_key="TRUE")
 
     with patch.object(gpt, "submit_request", return_value={"choices": []}):
         result = await gpt.run(
@@ -401,7 +402,7 @@ async def test_no_valid_results_from_remote_request():
 
 @pytest.mark.asyncio
 async def test_unable_to_find_valid_json_payload():
-    gpt = GPTJSON[MySchema](None)
+    gpt = GPTJSON[MySchema](api_key="TRUE")
 
     with patch.object(
         gpt,
@@ -421,7 +422,7 @@ async def test_unable_to_find_valid_json_payload():
 @pytest.mark.asyncio
 async def test_unknown_model_to_infer_max_tokens():
     with pytest.raises(ValueError):
-        GPTJSON[MySchema](model="UnknownModel", auto_trim=True)
+        GPTJSON[MySchema](api_key="TRUE", model="UnknownModel", auto_trim=True)
 
 
 @pytest.mark.asyncio
@@ -453,13 +454,15 @@ async def test_timeout():
             }
             return json_dumps(mock_response).encode()
 
-    with patch("aiohttp.ClientSession.request", new_callable=AsyncMock) as mock_request:
+    with patch("gpt_json.gpt.AsyncOpenAI") as mock_client:
         # Mock a stalling request
         async def side_effect(*args, **kwargs):
             await asyncio.sleep(4)
             return MockResponse("TEST_RESPONSE")
 
-        mock_request.side_effect = side_effect
+        mock_client.return_value.chat.completions.create = AsyncMock(
+            side_effect=side_effect
+        )
 
         gpt = GPTJSON[MySchema](api_key="ABC", timeout=2)
 
