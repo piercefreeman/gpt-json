@@ -2,17 +2,15 @@
 
 `gpt-json` is a wrapper around GPT that allows for declarative definition of expected output format. Set up a schema, write a prompt, and get results back as beautiful typehinted objects.
 
-Specifically this library:
+This library introduces the following features:
 
-- Utilizes Pydantic schema definitions for type casting and validations
-- Adds typehinting for both the API and the output schema
-- Allows GPT to respond with both single-objects and lists of objects
-- Includes some lightweight transformations of the output to remove superfluous context and fix broken json
-- Includes retry logic for the most common API failures
-- Formats the JSON schema as a flexible prompt that can be added into any message
-- Supports templating of prompts to allow for dynamic content
-- Validate typehinted function calls in the new GPT models, to better support agent creation
-- Lightweight dependencies: only OpenAI, pydantic, and backoff
+- 🏗️ Pydantic schema definitions for type casting and validations
+- 🧵 Templating of prompts to allow for dynamic content
+- 🔎 Supports Vision API, Function Calling, and standard chat prompts
+- 🚕 Lightweight transformations of the output to fix broken json
+- ♻️ Retry logic for the most common API failures
+- 📋 Predict single-objects and lists of objects
+- ✈️ Lightweight dependencies: only OpenAI, pydantic, and backoff
 
 ## Getting Started
 

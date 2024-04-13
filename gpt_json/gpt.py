@@ -24,6 +24,7 @@ from openai import AsyncOpenAI
 from openai._exceptions import APIConnectionError
 from openai._exceptions import APITimeoutError as OpenAITimeout
 from openai._exceptions import RateLimitError
+from openai.types.chat import ChatCompletionMessage
 from pydantic import BaseModel, Field, ValidationError
 from tiktoken import encoding_for_model
 
@@ -59,6 +60,9 @@ handler = logging.StreamHandler()
 formatter = logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
 handler.setFormatter(formatter)
 logger.addHandler(handler)
+
+# https://github.com/openai/openai-python/issues/1306
+ChatCompletionMessage.model_rebuild()
 
 
 def handle_backoff(details):
@@ -261,11 +265,11 @@ class GPTJSON(Generic[SchemaType]):
             except (ValueError, ValidationError):
                 raise InvalidFunctionParameters(function_name, function_args_string)
 
-        raw_response = GPTMessage.model_validate_json(response_message.model_dump_json())
+        raw_response = GPTMessage.model_validate(response_message.model_dump())
         raw_response.allow_templating = False
 
         extracted_json, fixed_payload = self.extract_json(
-            response_message, self.extract_type
+            raw_response, self.extract_type
         )
 
         # Cast to schema model
@@ -372,12 +376,12 @@ class GPTJSON(Generic[SchemaType]):
                 yield partial_response
                 previous_partial = partial_response
 
-    def extract_json(self, response_message, extract_type: ResponseType):
+    def extract_json(self, response_message: GPTMessage, extract_type: ResponseType):
         """
         Assumes one main block of results, either list of dictionary
         """
 
-        full_response = response_message.content
+        full_response = self.get_content_text(response_message.get_content_payloads())
         if not full_response:
             return None, None
 
