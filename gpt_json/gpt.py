@@ -1,7 +1,9 @@
 import logging
+import warnings
 from asyncio import TimeoutError as AsyncTimeoutError
 from asyncio import wait_for
 from copy import copy
+from datetime import datetime
 from json import dumps as json_dumps
 from json import loads as json_loads
 from json.decoder import JSONDecodeError
@@ -35,6 +37,7 @@ from gpt_json.models import (
     FixTransforms,
     GPTMessage,
     GPTModelVersion,
+    ModelVersionParams,
     ResponseType,
     TruncationOptions,
 )
@@ -106,6 +109,7 @@ class GPTJSON(Generic[SchemaType]):
         self,
         api_key: str,
         model: GPTModelVersion | str = GPTModelVersion.GPT_4,
+        model_max_tokens: int | None = None,
         auto_trim: bool = False,
         auto_trim_response_overhead: int = 0,
         functions: list[Callable[[Any], Any]] | None = None,
@@ -118,6 +122,9 @@ class GPTJSON(Generic[SchemaType]):
         """
         :param api_key: OpenAI API key, if `OPENAI_API_KEY` environment variable is not set
         :param model: GPTModelVersion or string model name
+        :param model_max_tokens: If a string is provided for the model name, users must specify the maximum tokens
+            that it supports. Allows for more flexibility in adding newer models that aren't yet specified
+            in the core library enum.
         :param auto_trim: If True, automatically trim messages to fit within the model's token limit
         :param auto_trim_response_overhead: If auto_trim is True, will leave at least `auto_trim_response_overhead` space
             for the output payload. For GPT, initial prompt + response <= allowed tokens.
@@ -127,7 +134,7 @@ class GPTJSON(Generic[SchemaType]):
         :param kwargs: Additional arguments to pass to OpenAI's `openai.Completion.create` method
 
         """
-        self.model = model.value if isinstance(model, GPTModelVersion) else model
+        self.model = self.get_model_metadata(model, model_max_tokens)
         self.auto_trim = auto_trim
         self.temperature = temperature
         self.timeout = timeout
@@ -167,18 +174,11 @@ class GPTJSON(Generic[SchemaType]):
                 "GPTJSON needs to be instantiated with a pydantic.BaseModel schema."
             )
 
-        if "gpt-4" in self.model:
-            self.max_tokens = (
-                8192 - auto_trim_response_overhead if self.auto_trim else 8192
-            )
-        elif "gpt-3.5" in self.model:
-            self.max_tokens = (
-                4096 - auto_trim_response_overhead if self.auto_trim else 4096
-            )
-        else:
-            raise ValueError(
-                "Unknown model to infer max tokens, see https://platform.openai.com/docs/models/gpt-4 for more information on token length."
-            )
+        self.max_tokens = (
+            self.model.max_length - auto_trim_response_overhead
+            if self.auto_trim
+            else self.model.max_length
+        )
 
         self.schema_prompt = generate_schema_prompt(self.schema_model)
         self.client = AsyncOpenAI(api_key=api_key)
@@ -437,7 +437,7 @@ class GPTJSON(Generic[SchemaType]):
             optional_parameters["function_call"] = "auto"
 
         execute_prediction = self.client.chat.completions.create(
-            model=self.model,
+            model=self.model.api_name,
             messages=[self.message_to_dict(message) for message in messages],
             temperature=self.temperature,
             stream=stream,
@@ -520,7 +520,7 @@ class GPTJSON(Generic[SchemaType]):
                     )
                     for message in messages
                 ],
-                self.model,
+                self.model.api_name,
             )
         )
 
@@ -531,7 +531,7 @@ class GPTJSON(Generic[SchemaType]):
 
         truncated_target_variable = truncate_tokens(
             text=format_variables[truncation_options.target_variable],
-            model=self.model,
+            model=self.model.api_name,
             mode=truncation_options.truncation_mode,
             max_tokens=target_variable_max_tokens,
             custom_truncate_next=truncation_options.custom_truncate_next,
@@ -634,6 +634,54 @@ class GPTJSON(Generic[SchemaType]):
             )
 
         return new_messages
+
+    def get_model_metadata(
+        self,
+        model: GPTModelVersion | str,
+        model_max_tokens: int | None,
+    ):
+        if isinstance(model, GPTModelVersion):
+            # User should not specify the model_max_tokens if they are passing a GPTModelVersion, since
+            # their value will be overridden by our default config
+            if model_max_tokens is not None:
+                raise ValueError(
+                    "model_max_tokens should not be specified when passing a GPTModelVersion object."
+                )
+
+            # Determine if the deprecation date is specified, should re-raise a deprecation warning
+            if model.value.deprecated_date is not None:
+                deprecation_date = model.value.deprecated_date
+                if deprecation_date < datetime.now():
+                    raise ValueError(
+                        f"Model {model.value.api_name} is deprecated as of {deprecation_date}."
+                    )
+                warnings.warn(
+                    f"Model {model.value.api_name} is deprecated as of {deprecation_date}.",
+                    DeprecationWarning,
+                    stacklevel=2,
+                )
+
+            # Specific deprecation warning related to our implementation. We want to encourage users
+            # to use a absolute model version instead of a continuously updating one.
+            if model in {GPTModelVersion.GPT_4, GPTModelVersion.GPT_3_5}:
+                warnings.warn(
+                    f"gpt-json will not support continuous model updates going forward.\n"
+                    "Switch to an absolute model revision like `GPTModelVersion.GPT_4_0613`.",
+                    DeprecationWarning,
+                    stacklevel=2,
+                )
+
+            return model.value
+
+        if not model_max_tokens:
+            raise ValueError(
+                "You must specify a `model_max_tokens` if you are using a custom model"
+            )
+
+        return ModelVersionParams(
+            api_name=model,
+            max_length=model_max_tokens,
+        )
 
     def __class_getitem__(cls, item):
         cls._cls_schema_model = item

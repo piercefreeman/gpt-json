@@ -1,5 +1,6 @@
 import sys
 from dataclasses import dataclass
+from datetime import date
 from enum import Enum, unique
 from typing import Callable
 
@@ -35,10 +36,37 @@ class GPTMessageRole(EnumSuper):
     FUNCTION = "function"
 
 
+@dataclass
+class ModelVersionParams:
+    api_name: str
+    max_length: int
+    deprecated_date: date | None = None
+
+
 @unique
-class GPTModelVersion(EnumSuper):
-    GPT_3_5 = "gpt-3.5-turbo-0613"
-    GPT_4 = "gpt-4-0613"
+class GPTModelVersion(Enum):
+    # Model versions prioritize explicit datestamped model versions over the generic
+    # counterparts to reduce errors caused by invisible model-skew
+    # https://platform.openai.com/docs/models/continuous-model-upgrades
+
+    GPT_3_5_0613 = ModelVersionParams(
+        api_name="gpt-3.5-turbo-0613",
+        max_length=16_385,
+        deprecated_date=date(2024, 6, 13),
+    )
+    GPT_3_5_1106 = ModelVersionParams(api_name="gpt-3.5-turbo-1106", max_length=16_385)
+    GPT_3_5_0125 = ModelVersionParams(api_name="gpt-3.5-turbo-0125", max_length=16_385)
+
+    GPT_4_0613 = ModelVersionParams(api_name="gpt-4-0613", max_length=8_192)
+    GPT_4_32K_0613 = ModelVersionParams(api_name="gpt-4-32k-0613", max_length=32768)
+    GPT_4_VISION_PREVIEW_1106 = ModelVersionParams(
+        api_name="gpt-4-1106-vision-preview", max_length=128_000
+    )
+
+    # Deprecated internally - switch to explicit model revisions
+    # Kept for reverse compatibility
+    GPT_3_5 = GPT_3_5_0613
+    GPT_4 = GPT_4_0613
 
 
 @unique

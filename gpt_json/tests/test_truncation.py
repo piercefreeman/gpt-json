@@ -81,7 +81,7 @@ def test_token_truncation_end_mode():
     assert (
         truncate_tokens(
             "hello world goodbye world world",
-            GPTModelVersion.GPT_3_5.value,
+            GPTModelVersion.GPT_3_5.value.api_name,
             VariableTruncationMode.BEGINNING,
             2,
         )
@@ -93,7 +93,7 @@ def test_token_truncation_beginning_mode():
     assert (
         truncate_tokens(
             "hello world world goodbye world",
-            GPTModelVersion.GPT_3_5.value,
+            GPTModelVersion.GPT_3_5.value.api_name,
             VariableTruncationMode.TRAILING,
             2,
         )
@@ -105,7 +105,7 @@ def test_token_truncation_middle_mode():
     assert (
         truncate_tokens(
             "hello world goodbye world world",
-            GPTModelVersion.GPT_3_5.value,
+            GPTModelVersion.GPT_3_5.value.api_name,
             VariableTruncationMode.MIDDLE,
             1,
         )
@@ -115,7 +115,7 @@ def test_token_truncation_middle_mode():
     assert (
         truncate_tokens(
             "hello world goodbye world world",
-            GPTModelVersion.GPT_3_5.value,
+            GPTModelVersion.GPT_3_5.value.api_name,
             VariableTruncationMode.MIDDLE,
             2,
         )
@@ -125,7 +125,7 @@ def test_token_truncation_middle_mode():
     assert (
         truncate_tokens(
             "hello world goodbye world world",
-            GPTModelVersion.GPT_3_5.value,
+            GPTModelVersion.GPT_3_5.value.api_name,
             VariableTruncationMode.MIDDLE,
             3,
         )
@@ -138,7 +138,7 @@ def test_token_truncation_random_mode():
     assert (
         truncate_tokens(
             "hello world goodbye world",
-            GPTModelVersion.GPT_3_5.value,
+            GPTModelVersion.GPT_3_5.value.api_name,
             VariableTruncationMode.RANDOM,
             2,
         )
@@ -153,7 +153,7 @@ def test_token_truncation_custom_mode():
     assert (
         truncate_tokens(
             "hello | world | goodbye | world | world",
-            GPTModelVersion.GPT_3_5.value,
+            GPTModelVersion.GPT_3_5.value.api_name,
             VariableTruncationMode.CUSTOM,
             3,
             _custom_truncate,

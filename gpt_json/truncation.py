@@ -17,8 +17,10 @@ def decode(tokens: list[int], model: str) -> str:
 
 
 def gpt_message_markup_v1(messages: list[dict[str, str]], model: str) -> int:
-    """Converts a list of messages into the number of tokens used by the model, following the
+    """
+    Converts a list of messages into the number of tokens used by the model, following the
     markup rules for GPT-3.5 and GPT-4 defined here: https://platform.openai.com/docs/guides/chat/managing-tokens.
+
     """
     encoding = tiktoken.encoding_for_model(model)
 
@@ -36,8 +38,15 @@ def gpt_message_markup_v1(messages: list[dict[str, str]], model: str) -> int:
 
 
 MODEL_MESSAGE_MARKUP = {
-    GPTModelVersion.GPT_4.value: gpt_message_markup_v1,
-    GPTModelVersion.GPT_3_5.value: gpt_message_markup_v1,
+    # For now all the models have the same tokenization strategy
+    enum_value.value.api_name: gpt_message_markup_v1
+    for enum_value in [
+        GPTModelVersion.GPT_4_0613,
+        GPTModelVersion.GPT_4_32K_0613,
+        GPTModelVersion.GPT_3_5_0613,
+        GPTModelVersion.GPT_3_5_1106,
+        GPTModelVersion.GPT_3_5_0125,
+    ]
 }
 
 
