@@ -1,13 +1,14 @@
 import asyncio
 from json import dumps as json_dumps
 from time import time
+from typing import Any
 from unittest.mock import AsyncMock, patch
 
 import pytest
 from openai._exceptions import APITimeoutError as OpenAITimeout
 from pydantic import BaseModel, Field
+from pytest_httpx import HTTPXMock
 
-from gpt_json.fn_calling import parse_function
 from gpt_json.gpt import GPTJSON, ListResponse
 from gpt_json.models import (
     FixTransforms,
@@ -24,6 +25,19 @@ from gpt_json.tests.shared import (
     get_current_weather,
 )
 from gpt_json.transformations import JsonFixEnum
+
+
+def make_assistant_response(choices: list[Any]):
+    # https://platform.openai.com/docs/api-reference/chat/create
+    return {
+        "id": "chatcmpl-123",
+        "object": "chat.completion",
+        "created": 1677652288,
+        "model": "gpt-3.5-turbo-0125",
+        "system_fingerprint": "fp_3478aj6f3a",
+        "choices": choices,
+        "usage": {"prompt_tokens": 9, "completion_tokens": 12, "total_tokens": 21},
+    }
 
 
 def test_throws_error_if_no_model_specified():
@@ -145,6 +159,7 @@ def test_cast_message_to_gpt_format(role_type: GPTMessageRole, expected: str):
 )
 async def test_create(
     schema_typehint,
+    httpx_mock: HTTPXMock,
     response_raw: str,
     parsed: BaseModel,
     expected_transformations: FixTransforms,
@@ -158,50 +173,31 @@ async def test_create(
     ]
 
     # Define mock response
-    mock_response = {
-        "choices": [
-            {
-                "message": {
-                    "role": "assistant",
-                    "content": response_raw,
-                },
-                "index": 0,
-                "finish_reason": "stop",
-            }
-        ]
-    }
-
-    with patch("gpt_json.gpt.AsyncOpenAI") as mock_client:
-        mock_client.return_value.chat.completions.create = AsyncMock(
-            return_value=mock_response
-        )
-
-        model = GPTJSON[schema_typehint](
-            api_key="TEST",
-            model=model_version,
-            temperature=0.0,
-            timeout=60,
-        )
-
-        # Call the function and pass the expected parameters
-        response = await model.run(messages=messages)
-
-        # Assert that the mock function was called with the expected parameters
-        mock_client.return_value.chat.completions.create.assert_called_with(
-            model=model_version.value.api_name,
-            messages=[
+    httpx_mock.add_response(
+        url="https://api.openai.com/v1/chat/completions",
+        json=make_assistant_response(
+            [
                 {
-                    "role": message.role.value,
-                    "content": [
-                        content.model_dump(by_alias=True, exclude_unset=True)
-                        for content in message.get_content_payloads()
-                    ],
+                    "message": {
+                        "role": "assistant",
+                        "content": response_raw,
+                    },
+                    "index": 0,
+                    "finish_reason": "stop",
                 }
-                for message in messages
-            ],
-            temperature=0.0,
-            stream=False,
-        )
+            ]
+        ),
+    )
+
+    model = GPTJSON[schema_typehint](
+        api_key="TEST",
+        model=model_version,
+        temperature=0.0,
+        timeout=60,
+    )
+
+    # Call the function and pass the expected parameters
+    response = await model.run(messages=messages)
 
     assert response
     assert response.response
@@ -210,7 +206,9 @@ async def test_create(
 
 
 @pytest.mark.asyncio
-async def test_create_with_function_calls():
+async def test_create_with_function_calls(
+    httpx_mock: HTTPXMock,
+):
     model_version = GPTModelVersion.GPT_3_5
     messages = [
         GPTMessage(
@@ -219,60 +217,41 @@ async def test_create_with_function_calls():
         )
     ]
 
-    mock_response = {
-        "choices": [
-            {
-                "message": {
-                    "role": "assistant",
-                    "content": "",
-                    "function_call": {
-                        "name": "get_current_weather",
-                        "arguments": json_dumps(
-                            {
-                                "location": "Boston",
-                                "unit": "fahrenheit",
-                            }
-                        ),
-                    },
-                },
-                "index": 0,
-                "finish_reason": "stop",
-            }
-        ]
-    }
-
-    with patch("gpt_json.gpt.AsyncOpenAI") as mock_client:
-        mock_client.return_value.chat.completions.create = AsyncMock(
-            return_value=mock_response
-        )
-
-        model = GPTJSON[MySchema](
-            api_key="TEST",
-            model=model_version,
-            temperature=0.0,
-            timeout=60,
-            functions=[get_current_weather],
-        )
-
-        response = await model.run(messages=messages)
-
-        mock_client.return_value.chat.completions.create.assert_called_with(
-            model=model_version.value.api_name,
-            messages=[
+    # Define mock response
+    httpx_mock.add_response(
+        url="https://api.openai.com/v1/chat/completions",
+        json=make_assistant_response(
+            [
                 {
-                    "role": message.role.value,
-                    "content": [
-                        content.model_dump(by_alias=True, exclude_unset=True)
-                        for content in message.get_content_payloads()
-                    ],
+                    "message": {
+                        "role": "assistant",
+                        "content": "",
+                        "function_call": {
+                            "name": "get_current_weather",
+                            "arguments": json_dumps(
+                                {
+                                    "location": "Boston",
+                                    "unit": "fahrenheit",
+                                }
+                            ),
+                        },
+                    },
+                    "index": 0,
+                    "finish_reason": "stop",
                 }
-                for message in messages
-            ],
-            temperature=0.0,
-            stream=False,
-            functions=[parse_function(get_current_weather)],
-            function_call="auto",
-        )
+            ]
+        ),
+    )
+
+    model = GPTJSON[MySchema](
+        api_key="TEST",
+        model=model_version,
+        temperature=0.0,
+        timeout=60,
+        functions=[get_current_weather],
+    )
+
+    response = await model.run(messages=messages)
 
     assert response
     assert response.response is None
@@ -395,16 +374,17 @@ def test_fill_message_functions_template():
 
 
 @pytest.mark.asyncio
-async def test_extracted_json_is_None():
+async def test_extracted_json_is_none(httpx_mock: HTTPXMock):
     gpt = GPTJSON[MySchema](api_key="TRUE")
 
+    httpx_mock.add_response(
+        url="https://api.openai.com/v1/chat/completions",
+        json=make_assistant_response(
+            [{"message": {"content": "some content", "role": "assistant"}}]
+        ),
+    )
+
     with patch.object(
-        gpt,
-        "submit_request",
-        return_value={
-            "choices": [{"message": {"content": "some content", "role": "assistant"}}]
-        },
-    ), patch.object(
         gpt, "extract_json", return_value=(None, FixTransforms(None, False))
     ):
         result = await gpt.run(
@@ -419,32 +399,38 @@ async def test_extracted_json_is_None():
 
 
 @pytest.mark.asyncio
-async def test_no_valid_results_from_remote_request():
+async def test_no_valid_results_from_remote_request(
+    httpx_mock: HTTPXMock,
+):
     gpt = GPTJSON[MySchema](api_key="TRUE")
 
-    with patch.object(gpt, "submit_request", return_value={"choices": []}):
-        result = await gpt.run(
-            [
-                GPTMessage(
-                    role=GPTMessageRole.SYSTEM,
-                    content=[TextContent(text="message content")],
-                )
-            ]
-        )
-        assert result.response is None
+    httpx_mock.add_response(
+        url="https://api.openai.com/v1/chat/completions",
+        json=make_assistant_response([]),
+    )
+
+    result = await gpt.run(
+        [
+            GPTMessage(
+                role=GPTMessageRole.SYSTEM,
+                content=[TextContent(text="message content")],
+            )
+        ]
+    )
+    assert result.response is None
 
 
 @pytest.mark.asyncio
-async def test_unable_to_find_valid_json_payload():
+async def test_unable_to_find_valid_json_payload(httpx_mock: HTTPXMock):
+    httpx_mock.add_response(
+        url="https://api.openai.com/v1/chat/completions",
+        json=make_assistant_response(
+            [{"message": {"content": "some content", "role": "assistant"}}]
+        ),
+    )
     gpt = GPTJSON[MySchema](api_key="TRUE")
 
     with patch.object(
-        gpt,
-        "submit_request",
-        return_value={
-            "choices": [{"message": {"content": "some content", "role": "assistant"}}]
-        },
-    ), patch.object(
         gpt, "extract_json", return_value=(None, FixTransforms(None, False))
     ):
         result = await gpt.run(

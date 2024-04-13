@@ -183,7 +183,9 @@ class GPTJSON(Generic[SchemaType]):
         )
 
         self.schema_prompt = generate_schema_prompt(self.schema_model)
-        self.client = AsyncOpenAI(api_key=api_key)
+
+        # We use separate retry logic, versus the one that's baked into OpenAPI
+        self.client = AsyncOpenAI(api_key=api_key, max_retries=1)
 
     async def run(
         self,
@@ -225,7 +227,7 @@ class GPTJSON(Generic[SchemaType]):
         )
 
         logger.debug("------- RAW RESPONSE ----------")
-        logger.debug(response["choices"])
+        logger.debug(response.choices)
         logger.debug("------- END RAW RESPONSE ----------")
 
         # If the response requests a function call, prefer this over the main response
@@ -242,9 +244,9 @@ class GPTJSON(Generic[SchemaType]):
         function_call: Callable[[BaseModel], Any] | None = None
         function_parsed: BaseModel | None = None
 
-        if response_message.get("function_call"):
-            function_name = response_message["function_call"]["name"]
-            function_args_string = response_message["function_call"]["arguments"]
+        if response_message.function_call:
+            function_name = response_message.function_call.name
+            function_args_string = response_message.function_call.arguments
             if function_name not in self.functions:
                 raise InvalidFunctionResponse(function_name)
 
@@ -259,7 +261,7 @@ class GPTJSON(Generic[SchemaType]):
             except (ValueError, ValidationError):
                 raise InvalidFunctionParameters(function_name, function_args_string)
 
-        raw_response = GPTMessage.model_validate(response_message)
+        raw_response = GPTMessage.model_validate_json(response_message.model_dump_json())
         raw_response.allow_templating = False
 
         extracted_json, fixed_payload = self.extract_json(
@@ -375,7 +377,7 @@ class GPTJSON(Generic[SchemaType]):
         Assumes one main block of results, either list of dictionary
         """
 
-        full_response = response_message["content"]
+        full_response = response_message.content
         if not full_response:
             return None, None
 
@@ -402,13 +404,13 @@ class GPTJSON(Generic[SchemaType]):
             return None, fixed_payload
 
     def extract_response_message(self, completion_response):
-        choices = completion_response["choices"]
+        choices = completion_response.choices
 
         if not choices:
             logger.warning("No choices available, should report error...")
             return None
 
-        return choices[0]["message"]
+        return choices[0].message
 
     async def submit_request(
         self,
