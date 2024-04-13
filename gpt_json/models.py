@@ -101,31 +101,32 @@ class FunctionCall(BaseModel):
 
 class ImageContent(BaseModel):
     class ImageUrl(BaseModel):
-        url: HttpUrl | str
+        url: HttpUrl
+
+    class ImageBytes(BaseModel):
+        url: str
 
         @field_validator("url", mode="after")
         def validate_url(cls, value):
-            if isinstance(value, HttpUrl):
-                return value
-            elif isinstance(value, str):
+            if isinstance(value, str):
                 # Validate that we are a base64 encoded image
-                if not value.startswith("data:image/"):
+                if not value.startswith("data:"):
                     raise ValueError("Invalid image URL, must be a data URL")
             return value
 
-    image_url: ImageUrl
+    image_url: ImageUrl | ImageBytes
 
     payload_type: Literal["image_url"] = Field(default="image_url", alias="type")
 
     @classmethod
     def from_url(cls, url: str):
-        return ImageContent(image_url=ImageContent.ImageUrl(url=url))
+        return ImageContent(image_url=ImageContent.ImageUrl(url=HttpUrl(url)))
 
     @classmethod
     def from_bytes(cls, image_bytes: bytes, image_mime: str):
         encoded_image = b64encode(image_bytes).decode()
         data_url = f"data:{image_mime};base64,{encoded_image}"
-        return ImageContent(image_url=ImageContent.ImageUrl(url=data_url))
+        return ImageContent(image_url=ImageContent.ImageBytes(url=data_url))
 
 
 class TextContent(BaseModel):
