@@ -51,7 +51,7 @@ from gpt_json.streaming import (
     prepare_streaming_object,
 )
 from gpt_json.transformations import fix_bools, fix_truncated_json
-from gpt_json.truncation import num_tokens_from_messages, truncate_tokens
+from gpt_json.truncation import truncate_tokens
 from gpt_json.types_oai import ChatCompletionChunk
 
 logger = logging.getLogger("gptjson_logger")
@@ -511,24 +511,26 @@ class GPTJSON(Generic[SchemaType]):
         )
 
         # fill the messages without the target variable to calculate the "space" we have left
+        enc = encoding_for_model("gpt-4")
         format_variables_no_target = format_variables.copy()
         format_variables_no_target[truncation_options.target_variable] = ""
-        target_variable_max_tokens = (
-            truncation_options.max_prompt_tokens
-            - num_tokens_from_messages(
-                [
-                    self.message_to_dict(
-                        self.fill_message_template(message, format_variables_no_target)
+        target_variable_max_tokens = truncation_options.max_prompt_tokens - sum(
+            [
+                len(
+                    enc.encode(
+                        self.get_content_text(new_message.get_content_payloads())
                     )
-                    for message in messages
-                ],
-                self.model.api_name,
-            )
+                )
+                for message in messages
+                for new_message in [
+                    self.fill_message_template(message, format_variables_no_target)
+                ]
+            ],
         )
 
-        if target_variable_max_tokens < 0:
+        if target_variable_max_tokens <= 0:
             raise ValueError(
-                f"Truncation options max_prompt_tokens {truncation_options.max_prompt_tokens} is too small to fit the messages."
+                f"Truncation options max_prompt_tokens {truncation_options.max_prompt_tokens} is too small to fit any part of the variable."
             )
 
         truncated_target_variable = truncate_tokens(
@@ -575,6 +577,7 @@ class GPTJSON(Generic[SchemaType]):
             content = payload.text.replace("{", "{{").replace("}", "}}")
             for key in auto_format.keys():
                 content = content.replace("{{" + key + "}}", "{" + key + "}")
+
             content = content.format(**auto_format)
 
             # We do this formatting in a separate pass so we can fill any template variables that might
@@ -588,7 +591,7 @@ class GPTJSON(Generic[SchemaType]):
         return new_message
 
     def message_to_dict(self, message: GPTMessage):
-        obj = json_loads(message.model_dump_json(exclude_unset=True))
+        obj = json_loads(message.model_dump_json(by_alias=True, exclude_unset=True))
         obj.pop("allow_templating", None)
         return obj
 
@@ -677,7 +680,7 @@ class GPTJSON(Generic[SchemaType]):
             # Determine if the deprecation date is specified, should re-raise a deprecation warning
             if model.value.deprecated_date is not None:
                 deprecation_date = model.value.deprecated_date
-                if deprecation_date < datetime.now():
+                if deprecation_date < datetime.now().date():
                     raise ValueError(
                         f"Model {model.value.api_name} is deprecated as of {deprecation_date}."
                     )

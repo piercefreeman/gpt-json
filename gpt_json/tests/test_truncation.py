@@ -12,14 +12,7 @@ from gpt_json.models import (
     TruncationOptions,
     VariableTruncationMode,
 )
-from gpt_json.truncation import num_tokens_from_messages, truncate_tokens
-
-
-@pytest.mark.parametrize("model", [model.value for model in GPTModelVersion])
-def test_num_tokens_implemented(model):
-    # no need to assert anything specific, just that its implemented for all models
-    # i.e. doesn't throw an error
-    num_tokens_from_messages([], model)
+from gpt_json.truncation import truncate_tokens
 
 
 def test_fill_messages_truncated():
@@ -42,7 +35,7 @@ def test_fill_messages_truncated():
         ),
         truncation_options=TruncationOptions(
             target_variable="long_text",
-            max_prompt_tokens=20,
+            max_prompt_tokens=8,
             truncation_mode=VariableTruncationMode.BEGINNING,
         ),
         max_response_tokens=None,
@@ -78,7 +71,7 @@ def test_fill_messages_truncated_failure_case():
             ),
             truncation_options=TruncationOptions(
                 target_variable="long_text",
-                max_prompt_tokens=2,
+                max_prompt_tokens=1,
                 truncation_mode=VariableTruncationMode.BEGINNING,
             ),
             max_response_tokens=None,

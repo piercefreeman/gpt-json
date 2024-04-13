@@ -135,11 +135,14 @@ async def test_gpt_stream(
 
         # Assert that the mock function was called with the expected parameters, including streaming
         mock_client.return_value.chat.completions.create.assert_called_with(
-            model=model_version.value,
+            model=model_version.value.api_name,
             messages=[
                 {
                     "role": message.role.value,
-                    "content": message.content,
+                    "content": [
+                        content.model_dump(by_alias=True, exclude_unset=True)
+                        for content in message.get_content_payloads()
+                    ],
                 }
                 for message in messages
             ],

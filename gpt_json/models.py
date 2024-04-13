@@ -1,6 +1,6 @@
 import sys
 from base64 import b64encode
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import date
 from enum import Enum, unique
 from typing import Callable, Literal
@@ -42,6 +42,7 @@ class ModelVersionParams:
     api_name: str
     max_length: int
     deprecated_date: date | None = None
+    archived: bool = False
 
 
 @unique
@@ -66,8 +67,8 @@ class GPTModelVersion(Enum):
 
     # Deprecated internally - switch to explicit model revisions
     # Kept for reverse compatibility
-    GPT_3_5 = GPT_3_5_0613
-    GPT_4 = GPT_4_0613
+    GPT_3_5 = replace(GPT_3_5_0613, archived=True)  # type: ignore
+    GPT_4 = replace(GPT_4_0613, archived=True)  # type: ignore
 
 
 @unique
@@ -103,7 +104,7 @@ class ImagePayload(BaseModel):
         url: HttpUrl | str
 
         @field_validator("url", mode="after")
-        def validate_url(self, value):
+        def validate_url(cls, value):
             if isinstance(value, HttpUrl):
                 return value
             elif isinstance(value, str):
