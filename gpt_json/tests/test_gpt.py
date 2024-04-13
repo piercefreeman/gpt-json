@@ -14,7 +14,7 @@ from gpt_json.models import (
     GPTMessage,
     GPTMessageRole,
     GPTModelVersion,
-    TextPayload,
+    TextContent,
 )
 from gpt_json.tests.shared import (
     GetCurrentWeatherRequest,
@@ -47,7 +47,7 @@ def test_cast_message_to_gpt_format(role_type: GPTMessageRole, expected: str):
         parser.message_to_dict(
             GPTMessage(
                 role=role_type,
-                content=[TextPayload(text="test")],
+                content=[TextContent(text="test")],
             )
         )["role"]
         == expected
@@ -153,7 +153,7 @@ async def test_create(
     messages = [
         GPTMessage(
             role=GPTMessageRole.USER,
-            content=[TextPayload(text="Input prompt")],
+            content=[TextContent(text="Input prompt")],
         )
     ]
 
@@ -215,7 +215,7 @@ async def test_create_with_function_calls():
     messages = [
         GPTMessage(
             role=GPTMessageRole.USER,
-            content=[TextPayload(text="Input prompt")],
+            content=[TextContent(text="Input prompt")],
         )
     ]
 
@@ -355,7 +355,7 @@ def test_fill_message_schema_template():
         GPTMessage(
             role=GPTMessageRole.USER,
             content=[
-                TextPayload(
+                TextContent(
                     text="Variable: {max_length}\nMy schema is here: {json_schema}"
                 )
             ],
@@ -366,7 +366,7 @@ def test_fill_message_schema_template():
     ) == GPTMessage(
         role=GPTMessageRole.USER,
         content=[
-            TextPayload(
+            TextContent(
                 text='Variable: 100\nMy schema is here: {\n"template_field": str // Max length 100\n}'
             )
         ],
@@ -381,13 +381,13 @@ def test_fill_message_functions_template():
     assert gpt.fill_message_template(
         GPTMessage(
             role=GPTMessageRole.USER,
-            content=[TextPayload(text="Here are the functions available: {functions}")],
+            content=[TextContent(text="Here are the functions available: {functions}")],
         ),
         format_variables=dict(),
     ) == GPTMessage(
         role=GPTMessageRole.USER,
         content=[
-            TextPayload(
+            TextContent(
                 text='Here are the functions available: ["get_current_weather"]'
             )
         ],
@@ -411,7 +411,7 @@ async def test_extracted_json_is_None():
             [
                 GPTMessage(
                     role=GPTMessageRole.SYSTEM,
-                    content=[TextPayload(text="message content")],
+                    content=[TextContent(text="message content")],
                 )
             ]
         )
@@ -427,7 +427,7 @@ async def test_no_valid_results_from_remote_request():
             [
                 GPTMessage(
                     role=GPTMessageRole.SYSTEM,
-                    content=[TextPayload(text="message content")],
+                    content=[TextContent(text="message content")],
                 )
             ]
         )
@@ -451,7 +451,7 @@ async def test_unable_to_find_valid_json_payload():
             [
                 GPTMessage(
                     role=GPTMessageRole.SYSTEM,
-                    content=[TextPayload(text="message content")],
+                    content=[TextContent(text="message content")],
                 )
             ]
         )
@@ -512,7 +512,7 @@ async def test_timeout():
                 [
                     GPTMessage(
                         role=GPTMessageRole.SYSTEM,
-                        content=[TextPayload(text="message content")],
+                        content=[TextContent(text="message content")],
                     )
                 ],
             )

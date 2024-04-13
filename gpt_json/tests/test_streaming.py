@@ -4,7 +4,7 @@ from unittest.mock import patch
 import pytest
 
 from gpt_json.gpt import GPTJSON
-from gpt_json.models import GPTMessage, GPTMessageRole, GPTModelVersion, TextPayload
+from gpt_json.models import GPTMessage, GPTMessageRole, GPTModelVersion, TextContent
 from gpt_json.streaming import StreamingObject
 from gpt_json.tests.utils.streaming_utils import tokenize
 from gpt_json.tests.utils.test_streaming_utils import (
@@ -85,7 +85,7 @@ async def test_gpt_stream(
     messages = [
         GPTMessage(
             role=GPTMessageRole.USER,
-            content=[TextPayload(text="Input prompt")],
+            content=[TextContent(text="Input prompt")],
         )
     ]
 

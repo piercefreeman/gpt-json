@@ -37,10 +37,10 @@ from gpt_json.models import (
     FixTransforms,
     GPTMessage,
     GPTModelVersion,
-    ImagePayload,
+    ImageContent,
     ModelVersionParams,
     ResponseType,
-    TextPayload,
+    TextContent,
     TruncationOptions,
 )
 from gpt_json.parsers import find_json_response
@@ -570,7 +570,7 @@ class GPTJSON(Generic[SchemaType]):
 
         # Regular quotes should passthrough to the next stage, except for our special keys
         for payload in message.get_content_payloads():
-            if not isinstance(payload, TextPayload):
+            if not isinstance(payload, TextContent):
                 new_message.content.append(payload)
                 continue
 
@@ -611,7 +611,7 @@ class GPTJSON(Generic[SchemaType]):
         message_text = [message.get_content_payloads() for message in messages]
 
         enc = encoding_for_model("gpt-4")
-        filtered_messages: list[list[TextPayload | ImagePayload]] = []
+        filtered_messages: list[list[TextContent | ImageContent]] = []
         current_token_count = 0
         original_token_count = sum(
             [
@@ -634,7 +634,7 @@ class GPTJSON(Generic[SchemaType]):
                     filtered_messages.append(
                         [
                             # Note that this will drop any images in the current message
-                            TextPayload(text=cropped_message)
+                            TextContent(text=cropped_message)
                         ]
                     )
                 current_token_count += remaining_tokens
@@ -659,9 +659,9 @@ class GPTJSON(Generic[SchemaType]):
 
         return new_messages
 
-    def get_content_text(self, content: list[TextPayload | ImagePayload]):
+    def get_content_text(self, content: list[TextContent | ImageContent]):
         return " ".join(
-            [payload.text for payload in content if isinstance(payload, TextPayload)]
+            [payload.text for payload in content if isinstance(payload, TextContent)]
         )
 
     def get_model_metadata(

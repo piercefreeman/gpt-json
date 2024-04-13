@@ -99,7 +99,7 @@ class FunctionCall(BaseModel):
     name: str
 
 
-class ImagePayload(BaseModel):
+class ImageContent(BaseModel):
     class ImageUrl(BaseModel):
         url: HttpUrl | str
 
@@ -119,16 +119,16 @@ class ImagePayload(BaseModel):
 
     @classmethod
     def from_url(cls, url: str):
-        return ImagePayload(image_url=ImagePayload.ImageUrl(url=url))
+        return ImageContent(image_url=ImageContent.ImageUrl(url=url))
 
     @classmethod
     def from_bytes(cls, image_bytes: bytes, image_type: str):
         encoded_image = b64encode(image_bytes).decode()
         data_url = f"data:image/{image_type};base64,{encoded_image}"
-        return ImagePayload(image_url=ImagePayload.ImageUrl(url=data_url))
+        return ImageContent(image_url=ImageContent.ImageUrl(url=data_url))
 
 
-class TextPayload(BaseModel):
+class TextContent(BaseModel):
     text: str
 
     payload_type: Literal["text"] = Field(default="text", alias="type")
@@ -140,13 +140,13 @@ class GPTMessage(BaseModel):
     """
 
     role: GPTMessageRole
-    content: str | list[ImagePayload | TextPayload] | None
+    content: str | list[ImageContent | TextContent] | None
 
     @field_validator("content", mode="before")
     def wrap_content_in_payload(cls, value):
         # Support for old-syntax raw strings in the content
         if isinstance(value, str):
-            return [TextPayload(text=value)]
+            return [TextContent(text=value)]
         return value
 
     # Name is only supported if we're formatting a function message
@@ -167,9 +167,9 @@ class GPTMessage(BaseModel):
             raise ValueError("Cannot provide a name for non-function messages")
         return self
 
-    def get_content_payloads(self) -> list[TextPayload | ImagePayload]:
+    def get_content_payloads(self) -> list[TextContent | ImageContent]:
         if isinstance(self.content, str):
-            return [TextPayload(text=self.content)]
+            return [TextContent(text=self.content)]
         elif self.content is not None:
             return self.content
         else:

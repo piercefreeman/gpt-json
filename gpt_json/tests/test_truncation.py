@@ -8,7 +8,7 @@ from gpt_json.models import (
     GPTMessage,
     GPTMessageRole,
     GPTModelVersion,
-    TextPayload,
+    TextContent,
     TruncationOptions,
     VariableTruncationMode,
 )
@@ -23,11 +23,11 @@ def test_fill_messages_truncated():
     assert gpt.fill_messages(
         [
             GPTMessage(
-                role=GPTMessageRole.SYSTEM, content=[TextPayload(text="system")]
+                role=GPTMessageRole.SYSTEM, content=[TextContent(text="system")]
             ),
             GPTMessage(
                 role=GPTMessageRole.USER,
-                content=[TextPayload(text="some long text: {long_text}")],
+                content=[TextContent(text="some long text: {long_text}")],
             ),
         ],
         dict(
@@ -40,10 +40,10 @@ def test_fill_messages_truncated():
         ),
         max_response_tokens=None,
     ) == [
-        GPTMessage(role=GPTMessageRole.SYSTEM, content=[TextPayload(text="system")]),
+        GPTMessage(role=GPTMessageRole.SYSTEM, content=[TextContent(text="system")]),
         GPTMessage(
             role=GPTMessageRole.USER,
-            content=[TextPayload(text="some long text: hello world")],
+            content=[TextContent(text="some long text: hello world")],
         ),
     ]
 
@@ -59,11 +59,11 @@ def test_fill_messages_truncated_failure_case():
         gpt.fill_messages(
             [
                 GPTMessage(
-                    role=GPTMessageRole.SYSTEM, content=[TextPayload(text="system")]
+                    role=GPTMessageRole.SYSTEM, content=[TextContent(text="system")]
                 ),
                 GPTMessage(
                     role=GPTMessageRole.USER,
-                    content=[TextPayload(text="{long_text}")],
+                    content=[TextContent(text="{long_text}")],
                 ),
             ],
             dict(
