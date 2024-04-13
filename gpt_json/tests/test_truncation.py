@@ -25,7 +25,7 @@ def test_fill_messages_truncated():
     class TestSchema(BaseModel):
         summary: str
 
-    gpt = GPTJSON[TestSchema](None)
+    gpt = GPTJSON[TestSchema](api_key="TEST")
     assert gpt.fill_messages(
         [
             GPTMessage(role=GPTMessageRole.SYSTEM, content="system"),
@@ -53,7 +53,7 @@ def test_fill_messages_truncated_failure_case():
     class TestSchema(BaseModel):
         summary: str
 
-    gpt = GPTJSON[TestSchema](None)
+    gpt = GPTJSON[TestSchema](api_key="TEST")
 
     # this should fail because the max_prompt_tokens is too small
     with pytest.raises(ValueError, match=".* max_prompt_tokens .* too small .*"):
