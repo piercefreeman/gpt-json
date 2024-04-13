@@ -122,9 +122,9 @@ class ImageContent(BaseModel):
         return ImageContent(image_url=ImageContent.ImageUrl(url=url))
 
     @classmethod
-    def from_bytes(cls, image_bytes: bytes, image_type: str):
+    def from_bytes(cls, image_bytes: bytes, image_mime: str):
         encoded_image = b64encode(image_bytes).decode()
-        data_url = f"data:image/{image_type};base64,{encoded_image}"
+        data_url = f"data:{image_mime};base64,{encoded_image}"
         return ImageContent(image_url=ImageContent.ImageUrl(url=data_url))
 
 
