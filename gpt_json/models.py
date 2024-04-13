@@ -1,10 +1,11 @@
 import sys
+from base64 import b64encode
 from dataclasses import dataclass
 from datetime import date
 from enum import Enum, unique
-from typing import Callable
+from typing import Callable, Literal
 
-from pydantic import BaseModel, model_validator
+from pydantic import BaseModel, Field, HttpUrl, field_validator, model_validator
 
 if sys.version_info >= (3, 11):
     from enum import StrEnum
@@ -97,13 +98,55 @@ class FunctionCall(BaseModel):
     name: str
 
 
+class ImagePayload(BaseModel):
+    class ImageUrl(BaseModel):
+        url: HttpUrl | str
+
+        @field_validator("url", mode="after")
+        def validate_url(self, value):
+            if isinstance(value, HttpUrl):
+                return value
+            elif isinstance(value, str):
+                # Validate that we are a base64 encoded image
+                if not value.startswith("data:image/"):
+                    raise ValueError("Invalid image URL, must be a data URL")
+            return value
+
+    image_url: ImageUrl
+
+    payload_type: Literal["image_url"] = Field(default="image_url", alias="type")
+
+    @classmethod
+    def from_url(cls, url: str):
+        return ImagePayload(image_url=ImagePayload.ImageUrl(url=url))
+
+    @classmethod
+    def from_bytes(cls, image_bytes: bytes, image_type: str):
+        encoded_image = b64encode(image_bytes).decode()
+        data_url = f"data:image/{image_type};base64,{encoded_image}"
+        return ImagePayload(image_url=ImagePayload.ImageUrl(url=data_url))
+
+
+class TextPayload(BaseModel):
+    text: str
+
+    payload_type: Literal["text"] = Field(default="text", alias="type")
+
+
 class GPTMessage(BaseModel):
     """
     A single message in the chat sequence
     """
 
     role: GPTMessageRole
-    content: str | None
+    content: str | list[ImagePayload | TextPayload] | None
+
+    @field_validator("content", mode="before")
+    def wrap_content_in_payload(cls, value):
+        # Support for old-syntax raw strings in the content
+        if isinstance(value, str):
+            return [TextPayload(text=value)]
+        return value
 
     # Name is only supported if we're formatting a function message
     name: str | None = None
@@ -122,6 +165,14 @@ class GPTMessage(BaseModel):
         if self.role != GPTMessageRole.FUNCTION and self.name is not None:
             raise ValueError("Cannot provide a name for non-function messages")
         return self
+
+    def get_content_payloads(self) -> list[TextPayload | ImagePayload]:
+        if isinstance(self.content, str):
+            return [TextPayload(text=self.content)]
+        elif self.content is not None:
+            return self.content
+        else:
+            return []
 
 
 @dataclass

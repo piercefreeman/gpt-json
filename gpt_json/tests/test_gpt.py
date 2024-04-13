@@ -9,7 +9,13 @@ from pydantic import BaseModel, Field
 
 from gpt_json.fn_calling import parse_function
 from gpt_json.gpt import GPTJSON, ListResponse
-from gpt_json.models import FixTransforms, GPTMessage, GPTMessageRole, GPTModelVersion
+from gpt_json.models import (
+    FixTransforms,
+    GPTMessage,
+    GPTMessageRole,
+    GPTModelVersion,
+    TextPayload,
+)
 from gpt_json.tests.shared import (
     GetCurrentWeatherRequest,
     MySchema,
@@ -41,7 +47,7 @@ def test_cast_message_to_gpt_format(role_type: GPTMessageRole, expected: str):
         parser.message_to_dict(
             GPTMessage(
                 role=role_type,
-                content="test",
+                content=[TextPayload(text="test")],
             )
         )["role"]
         == expected
@@ -147,7 +153,7 @@ async def test_create(
     messages = [
         GPTMessage(
             role=GPTMessageRole.USER,
-            content="Input prompt",
+            content=[TextPayload(text="Input prompt")],
         )
     ]
 
@@ -206,7 +212,7 @@ async def test_create_with_function_calls():
     messages = [
         GPTMessage(
             role=GPTMessageRole.USER,
-            content="Input prompt",
+            content=[TextPayload(text="Input prompt")],
         )
     ]
 
@@ -342,14 +348,22 @@ def test_fill_message_schema_template():
     assert gpt.fill_message_template(
         GPTMessage(
             role=GPTMessageRole.USER,
-            content="Variable: {max_length}\nMy schema is here: {json_schema}",
+            content=[
+                TextPayload(
+                    text="Variable: {max_length}\nMy schema is here: {json_schema}"
+                )
+            ],
         ),
         dict(
             max_length=100,
         ),
     ) == GPTMessage(
         role=GPTMessageRole.USER,
-        content='Variable: 100\nMy schema is here: {\n"template_field": str // Max length 100\n}',
+        content=[
+            TextPayload(
+                text='Variable: 100\nMy schema is here: {\n"template_field": str // Max length 100\n}'
+            )
+        ],
     )
 
 
@@ -361,12 +375,16 @@ def test_fill_message_functions_template():
     assert gpt.fill_message_template(
         GPTMessage(
             role=GPTMessageRole.USER,
-            content="Here are the functions available: {functions}",
+            content=[TextPayload(text="Here are the functions available: {functions}")],
         ),
         format_variables=dict(),
     ) == GPTMessage(
         role=GPTMessageRole.USER,
-        content='Here are the functions available: ["get_current_weather"]',
+        content=[
+            TextPayload(
+                text='Here are the functions available: ["get_current_weather"]'
+            )
+        ],
     )
 
 
@@ -384,7 +402,12 @@ async def test_extracted_json_is_None():
         gpt, "extract_json", return_value=(None, FixTransforms(None, False))
     ):
         result = await gpt.run(
-            [GPTMessage(role=GPTMessageRole.SYSTEM, content="message content")]
+            [
+                GPTMessage(
+                    role=GPTMessageRole.SYSTEM,
+                    content=[TextPayload(text="message content")],
+                )
+            ]
         )
         assert result.response is None
 
@@ -395,7 +418,12 @@ async def test_no_valid_results_from_remote_request():
 
     with patch.object(gpt, "submit_request", return_value={"choices": []}):
         result = await gpt.run(
-            [GPTMessage(role=GPTMessageRole.SYSTEM, content="message content")]
+            [
+                GPTMessage(
+                    role=GPTMessageRole.SYSTEM,
+                    content=[TextPayload(text="message content")],
+                )
+            ]
         )
         assert result.response is None
 
@@ -414,7 +442,12 @@ async def test_unable_to_find_valid_json_payload():
         gpt, "extract_json", return_value=(None, FixTransforms(None, False))
     ):
         result = await gpt.run(
-            [GPTMessage(role=GPTMessageRole.SYSTEM, content="message content")]
+            [
+                GPTMessage(
+                    role=GPTMessageRole.SYSTEM,
+                    content=[TextPayload(text="message content")],
+                )
+            ]
         )
         assert result.response is None
 
@@ -470,7 +503,12 @@ async def test_timeout():
 
         with pytest.raises(OpenAITimeout):
             await gpt.run(
-                [GPTMessage(role=GPTMessageRole.SYSTEM, content="message content")],
+                [
+                    GPTMessage(
+                        role=GPTMessageRole.SYSTEM,
+                        content=[TextPayload(text="message content")],
+                    )
+                ],
             )
 
         end_time = time()

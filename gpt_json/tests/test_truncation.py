@@ -8,6 +8,7 @@ from gpt_json.models import (
     GPTMessage,
     GPTMessageRole,
     GPTModelVersion,
+    TextPayload,
     TruncationOptions,
     VariableTruncationMode,
 )
@@ -28,10 +29,12 @@ def test_fill_messages_truncated():
     gpt = GPTJSON[TestSchema](api_key="TEST")
     assert gpt.fill_messages(
         [
-            GPTMessage(role=GPTMessageRole.SYSTEM, content="system"),
+            GPTMessage(
+                role=GPTMessageRole.SYSTEM, content=[TextPayload(text="system")]
+            ),
             GPTMessage(
                 role=GPTMessageRole.USER,
-                content="some long text: {long_text}",
+                content=[TextPayload(text="some long text: {long_text}")],
             ),
         ],
         dict(
@@ -44,8 +47,11 @@ def test_fill_messages_truncated():
         ),
         max_response_tokens=None,
     ) == [
-        GPTMessage(role=GPTMessageRole.SYSTEM, content="system"),
-        GPTMessage(role=GPTMessageRole.USER, content="some long text: hello world"),
+        GPTMessage(role=GPTMessageRole.SYSTEM, content=[TextPayload(text="system")]),
+        GPTMessage(
+            role=GPTMessageRole.USER,
+            content=[TextPayload(text="some long text: hello world")],
+        ),
     ]
 
 
@@ -59,10 +65,12 @@ def test_fill_messages_truncated_failure_case():
     with pytest.raises(ValueError, match=".* max_prompt_tokens .* too small .*"):
         gpt.fill_messages(
             [
-                GPTMessage(role=GPTMessageRole.SYSTEM, content="system"),
+                GPTMessage(
+                    role=GPTMessageRole.SYSTEM, content=[TextPayload(text="system")]
+                ),
                 GPTMessage(
                     role=GPTMessageRole.USER,
-                    content="{long_text}",
+                    content=[TextPayload(text="{long_text}")],
                 ),
             ],
             dict(

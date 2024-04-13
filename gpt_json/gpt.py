@@ -37,8 +37,10 @@ from gpt_json.models import (
     FixTransforms,
     GPTMessage,
     GPTModelVersion,
+    ImagePayload,
     ModelVersionParams,
     ResponseType,
+    TextPayload,
     TruncationOptions,
 )
 from gpt_json.parsers import find_json_response
@@ -561,18 +563,28 @@ class GPTJSON(Generic[SchemaType]):
         if message.content is None or not message.allow_templating:
             return message
 
-        # Regular quotes should passthrough to the next stage, except for our special keys
-        content = message.content.replace("{", "{{").replace("}", "}}")
-        for key in auto_format.keys():
-            content = content.replace("{{" + key + "}}", "{" + key + "}")
-        content = content.format(**auto_format)
-
-        # We do this formatting in a separate pass so we can fill any template variables that might
-        # have been left in the pydantic field typehints
-        content = content.format(**format_variables)
-
         new_message = copy(message)
-        new_message.content = content
+        new_message.content = []
+
+        # Regular quotes should passthrough to the next stage, except for our special keys
+        for payload in message.get_content_payloads():
+            if not isinstance(payload, TextPayload):
+                new_message.content.append(payload)
+                continue
+
+            content = payload.text.replace("{", "{{").replace("}", "}}")
+            for key in auto_format.keys():
+                content = content.replace("{{" + key + "}}", "{" + key + "}")
+            content = content.format(**auto_format)
+
+            # We do this formatting in a separate pass so we can fill any template variables that might
+            # have been left in the pydantic field typehints
+            content = content.format(**format_variables)
+
+            new_payload = copy(payload)
+            new_payload.text = content
+            new_message.content.append(new_payload)
+
         return new_message
 
     def message_to_dict(self, message: GPTMessage):
@@ -580,10 +592,11 @@ class GPTJSON(Generic[SchemaType]):
         obj.pop("allow_templating", None)
         return obj
 
-    def trim_messages(self, messages: list[GPTMessage], n: int):
+    def trim_messages(self, messages: list[GPTMessage], n: int) -> list[GPTMessage]:
         """
         Returns a list of messages with a total token count less than n tokens,
-        cropping the last message if needed.
+        cropping the last message if needed. Note - right now images are excluded
+        from the token count.
 
         Args:
             messages (list): List of strings to be checked.
@@ -592,17 +605,20 @@ class GPTJSON(Generic[SchemaType]):
         Returns:
             list: A list of messages with a total token count less than n tokens.
         """
-        message_text = [message.content for message in messages if message.content]
+        message_text = [message.get_content_payloads() for message in messages]
 
         enc = encoding_for_model("gpt-4")
-        filtered_messages = []
+        filtered_messages: list[list[TextPayload | ImagePayload]] = []
         current_token_count = 0
         original_token_count = sum(
-            [len(enc.encode(message)) for message in message_text]
+            [
+                len(enc.encode(self.get_content_text(message)))
+                for message in message_text
+            ]
         )
 
         for message in message_text:
-            tokens = enc.encode(message)
+            tokens = enc.encode(self.get_content_text(message))
             message_token_count = len(tokens)
 
             if current_token_count + message_token_count < n:
@@ -612,12 +628,17 @@ class GPTJSON(Generic[SchemaType]):
                 remaining_tokens = n - current_token_count
                 if remaining_tokens > 0:
                     cropped_message = enc.decode(tokens[:remaining_tokens])
-                    filtered_messages.append(cropped_message)
+                    filtered_messages.append(
+                        [
+                            # Note that this will drop any images in the current message
+                            TextPayload(text=cropped_message)
+                        ]
+                    )
                 current_token_count += remaining_tokens
                 break
 
         # Recreate the messages with our new text
-        new_messages = []
+        new_messages: list[GPTMessage] = []
         for i, content in enumerate(filtered_messages):
             new_message = copy(messages[i])
             new_message.content = content
@@ -634,6 +655,11 @@ class GPTJSON(Generic[SchemaType]):
             )
 
         return new_messages
+
+    def get_content_text(self, content: list[TextPayload | ImagePayload]):
+        return " ".join(
+            [payload.text for payload in content if isinstance(payload, TextPayload)]
+        )
 
     def get_model_metadata(
         self,
