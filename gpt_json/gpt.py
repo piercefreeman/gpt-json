@@ -100,6 +100,7 @@ class RunResponse(BaseModel, Generic[SchemaType]):
     fix_transforms: FixTransforms | None
     function_call: Callable[[BaseModel], Any] | None
     function_arg: BaseModel | None
+    usage: dict[str, int] | None = None
 
 
 class GPTJSON(Generic[SchemaType]):
@@ -243,8 +244,13 @@ class GPTJSON(Generic[SchemaType]):
                 fix_transforms=None,
                 function_call=None,
                 function_arg=None,
+                usage=None,
             )
 
+        usage = {}
+        if response["usage"]:
+            usage = response["usage"]
+            
         function_call: Callable[[BaseModel], Any] | None = None
         function_parsed: BaseModel | None = None
 
@@ -280,6 +286,7 @@ class GPTJSON(Generic[SchemaType]):
                 fix_transforms=fixed_payload,
                 function_call=function_call,
                 function_arg=function_parsed,
+                usage=usage,
             )
 
         if not self.schema_model:
@@ -294,6 +301,7 @@ class GPTJSON(Generic[SchemaType]):
             fix_transforms=fixed_payload,
             function_call=function_call,
             function_arg=function_parsed,
+            usage=usage,
         )
 
     async def stream(
