@@ -140,7 +140,7 @@ async def test_gpt_stream(
                 {
                     "role": message.role.value,
                     "content": [
-                        content.model_dump(by_alias=True, exclude_unset=True)
+                        content.model_dump(by_alias=True, exclude_none=True)
                         for content in message.get_content_payloads()
                     ],
                 }

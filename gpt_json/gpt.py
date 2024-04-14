@@ -597,7 +597,7 @@ class GPTJSON(Generic[SchemaType]):
         return new_message
 
     def message_to_dict(self, message: GPTMessage):
-        obj = json_loads(message.model_dump_json(by_alias=True, exclude_unset=True))
+        obj = json_loads(message.model_dump_json(by_alias=True, exclude_none=True))
         obj.pop("allow_templating", None)
         return obj
 
