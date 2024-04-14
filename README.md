@@ -2,15 +2,15 @@
 
 `gpt-json` is a wrapper around GPT that allows for declarative definition of expected output format. Set up a schema, write a prompt, and get results back as beautiful typehinted objects.
 
-Specifically this library:
-- Utilizes Pydantic schema definitions for type casting and validations
-- Adds typehinting for both the API and the output schema
-- Allows GPT to respond with both single-objects and lists of objects
-- Includes some lightweight transformations of the output to remove superfluous context and fix broken json
-- Includes retry logic for the most common API failures
-- Formats the JSON schema as a flexible prompt that can be added into any message
-- Supports templating of prompts to allow for dynamic content
-- Validate typehinted function calls in the new GPT models, to better support agent creation
+This library introduces the following features:
+
+- 🏗️ Pydantic schema definitions for type casting and validations
+- 🧵 Templating of prompts to allow for dynamic content
+- 🔎 Supports Vision API, Function Calling, and standard chat prompts
+- 🚕 Lightweight transformations of the output to fix broken json
+- ♻️ Retry logic for the most common API failures
+- 📋 Predict single-objects and lists of objects
+- ✈️ Lightweight dependencies: only OpenAI, pydantic, and backoff
 
 ## Getting Started
 
@@ -197,19 +197,19 @@ GPT makes no guarantees about the validity of the returned functions. They could
 
 The `GPTJSON` class supports other configuration parameters at initialization.
 
-| Parameter                   | Type                   | Description                                                                                                                                                                            |
-|-----------------------------|------------------------|----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| model                       | GPTModelVersion \| str | (default: GPTModelVersion.GPT_4) - For convenience we provide the currently supported GPT model versions in the `GPTModelVersion` enum. You can also pass a string value if you want to use another more specific architecture.                                                                                                                                                       |
-| auto_trim                   | bool                   | (default: False) - If your input prompt is too long, perhaps because of dynamic injected content, will automatically truncate the text to create enough room for the model's response. |
-| auto_trim_response_overhead | int                    | (default: 0) - If you're using auto_trim, configures the max amount of tokens to allow in the model's response.                                                                        |
-| **kwargs | Any | Any other parameters you want to pass to the underlying `GPT` class, will just be a passthrough. |
+| Parameter                   | Type                   | Description                                                                                                                                                                                                                     |
+| --------------------------- | ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| model                       | GPTModelVersion \| str | (default: GPTModelVersion.GPT_4) - For convenience we provide the currently supported GPT model versions in the `GPTModelVersion` enum. You can also pass a string value if you want to use another more specific architecture. |
+| auto_trim                   | bool                   | (default: False) - If your input prompt is too long, perhaps because of dynamic injected content, will automatically truncate the text to create enough room for the model's response.                                          |
+| auto_trim_response_overhead | int                    | (default: 0) - If you're using auto_trim, configures the max amount of tokens to allow in the model's response.                                                                                                                 |
+| \*\*kwargs                  | Any                    | Any other parameters you want to pass to the underlying `GPT` class, will just be a passthrough.                                                                                                                                |
 
 ## Transformations
 
 GPT (especially GPT-4) is relatively good at formatting responses at JSON, but it's not perfect. Some of the more common issues are:
 
-- *Response truncation*: Since GPT is not internally aware of its response length limit, JSON payloads will sometimes exhaust the available token space. This results in a broken JSON payload where much of the data is valid but the JSON object is not closed, which is not valid syntax. There are many cases where this behavior is actually okay for production applications - for instance, if you list 100 generated strings, it's sometimes okay for you to take the 70 that actually rendered. In this case, `gpt-json` will attempt to fix the truncated payload by recreating the JSON object and closing it.
-- *Boolean variables*: GPT will sometimes confuse valid JSON boolean values with the boolean tokens that are used in other languages. The most common is generating `True` instead of `true`. `gpt-json` will attempt to fix these values.
+- _Response truncation_: Since GPT is not internally aware of its response length limit, JSON payloads will sometimes exhaust the available token space. This results in a broken JSON payload where much of the data is valid but the JSON object is not closed, which is not valid syntax. There are many cases where this behavior is actually okay for production applications - for instance, if you list 100 generated strings, it's sometimes okay for you to take the 70 that actually rendered. In this case, `gpt-json` will attempt to fix the truncated payload by recreating the JSON object and closing it.
+- _Boolean variables_: GPT will sometimes confuse valid JSON boolean values with the boolean tokens that are used in other languages. The most common is generating `True` instead of `true`. `gpt-json` will attempt to fix these values.
 
 When calling `gpt_json.run()`, we return a tuple of values:
 
@@ -225,7 +225,7 @@ FixTransforms(fixed_truncation=True, fixed_bools=False)
 
 The first object is your generated Pydantic model. The second object is our correction storage object `FixTransforms`. This dataclass contains flags for each of the supported transformation cases that are sketched out above. This allows you to determine whether the response was explicitly parsed from the GPT JSON, or was passed through some middlelayers to get a correct output. From there you can accept or reject the response based on your own business logic.
 
-*Where you can help*: There are certainly more areas of common (and not-so-common failures). If you see these, please add a test case to the unit tests. If you can write a handler to help solve the general case, please do so. Otherwise flag it as a `pytest.xfail` and we'll add it to the backlog.
+_Where you can help_: There are certainly more areas of common (and not-so-common failures). If you see these, please add a test case to the unit tests. If you can write a handler to help solve the general case, please do so. Otherwise flag it as a `pytest.xfail` and we'll add it to the backlog.
 
 ## Testing
 

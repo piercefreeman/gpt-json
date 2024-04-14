@@ -3,7 +3,7 @@ from typing import Callable
 
 import tiktoken
 
-from gpt_json.models import GPTModelVersion, VariableTruncationMode
+from gpt_json.models import VariableTruncationMode
 
 
 def tokenize(text: str, model: str) -> list[int]:
@@ -14,41 +14,6 @@ def tokenize(text: str, model: str) -> list[int]:
 def decode(tokens: list[int], model: str) -> str:
     enc = tiktoken.encoding_for_model(model)
     return enc.decode(tokens)
-
-
-def gpt_message_markup_v1(messages: list[dict[str, str]], model: str) -> int:
-    """Converts a list of messages into the number of tokens used by the model, following the
-    markup rules for GPT-3.5 and GPT-4 defined here: https://platform.openai.com/docs/guides/chat/managing-tokens.
-    """
-    encoding = tiktoken.encoding_for_model(model)
-
-    num_tokens = 0
-    for message in messages:
-        num_tokens += (
-            4  # every message follows <im_start>{role/name}\n{content}<im_end>\n
-        )
-        for key, value in message.items():
-            num_tokens += len(encoding.encode(value))
-            if key == "name":  # if there's a name, the role is omitted
-                num_tokens += -1  # role is always required and always 1 token
-    num_tokens += 2  # every reply is primed with <im_start>assistant
-    return num_tokens
-
-
-MODEL_MESSAGE_MARKUP = {
-    GPTModelVersion.GPT_4.value: gpt_message_markup_v1,
-    GPTModelVersion.GPT_3_5.value: gpt_message_markup_v1,
-}
-
-
-def num_tokens_from_messages(messages: list[dict[str, str]], model: str) -> int:
-    """Returns the number of tokens used by a list of messages.
-    NOTE: for future models, there may be structural changes to how messages are converted into content
-    that affect the number of tokens. Future models should be added to MODEL_MESSAGE_MARKUP.
-    """
-    if model not in MODEL_MESSAGE_MARKUP:
-        raise NotImplementedError(f"Model {model} message markup not implemented")
-    return MODEL_MESSAGE_MARKUP[model](messages, model)
 
 
 def truncate_tokens(

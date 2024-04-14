@@ -1,9 +1,11 @@
 import sys
-from dataclasses import dataclass
+from base64 import b64encode
+from dataclasses import dataclass, replace
+from datetime import date
 from enum import Enum, unique
-from typing import Callable
+from typing import Callable, Literal
 
-from pydantic import BaseModel, model_validator
+from pydantic import BaseModel, Field, HttpUrl, field_validator, model_validator
 
 if sys.version_info >= (3, 11):
     from enum import StrEnum
@@ -35,10 +37,38 @@ class GPTMessageRole(EnumSuper):
     FUNCTION = "function"
 
 
+@dataclass
+class ModelVersionParams:
+    api_name: str
+    max_length: int
+    deprecated_date: date | None = None
+    archived: bool = False
+
+
 @unique
-class GPTModelVersion(EnumSuper):
-    GPT_3_5 = "gpt-3.5-turbo-0613"
-    GPT_4 = "gpt-4-0613"
+class GPTModelVersion(Enum):
+    # Model versions prioritize explicit datestamped model versions over the generic
+    # counterparts to reduce errors caused by invisible model-skew
+    # https://platform.openai.com/docs/models/continuous-model-upgrades
+
+    GPT_3_5_0613 = ModelVersionParams(
+        api_name="gpt-3.5-turbo-0613",
+        max_length=16_385,
+        deprecated_date=date(2024, 6, 13),
+    )
+    GPT_3_5_1106 = ModelVersionParams(api_name="gpt-3.5-turbo-1106", max_length=16_385)
+    GPT_3_5_0125 = ModelVersionParams(api_name="gpt-3.5-turbo-0125", max_length=16_385)
+
+    GPT_4_0613 = ModelVersionParams(api_name="gpt-4-0613", max_length=8_192)
+    GPT_4_32K_0613 = ModelVersionParams(api_name="gpt-4-32k-0613", max_length=32768)
+    GPT_4_VISION_PREVIEW_1106 = ModelVersionParams(
+        api_name="gpt-4-1106-vision-preview", max_length=128_000
+    )
+
+    # Deprecated internally - switch to explicit model revisions
+    # Kept for reverse compatibility
+    GPT_3_5 = replace(GPT_3_5_0613, archived=True)  # type: ignore
+    GPT_4 = replace(GPT_4_0613, archived=True)  # type: ignore
 
 
 @unique
@@ -69,13 +99,56 @@ class FunctionCall(BaseModel):
     name: str
 
 
+class ImageContent(BaseModel):
+    class ImageUrl(BaseModel):
+        url: HttpUrl
+
+    class ImageBytes(BaseModel):
+        url: str
+
+        @field_validator("url", mode="after")
+        def validate_url(cls, value):
+            if isinstance(value, str):
+                # Validate that we are a base64 encoded image
+                if not value.startswith("data:"):
+                    raise ValueError("Invalid image URL, must be a data URL")
+            return value
+
+    image_url: ImageUrl | ImageBytes
+
+    payload_type: Literal["image_url"] = Field(default="image_url", alias="type")
+
+    @classmethod
+    def from_url(cls, url: str):
+        return ImageContent(image_url=ImageContent.ImageUrl(url=HttpUrl(url)))
+
+    @classmethod
+    def from_bytes(cls, image_bytes: bytes, image_mime: str):
+        encoded_image = b64encode(image_bytes).decode()
+        data_url = f"data:{image_mime};base64,{encoded_image}"
+        return ImageContent(image_url=ImageContent.ImageBytes(url=data_url))
+
+
+class TextContent(BaseModel):
+    text: str
+
+    payload_type: Literal["text"] = Field(default="text", alias="type")
+
+
 class GPTMessage(BaseModel):
     """
     A single message in the chat sequence
     """
 
     role: GPTMessageRole
-    content: str | None
+    content: str | list[ImageContent | TextContent] | None
+
+    @field_validator("content", mode="before")
+    def wrap_content_in_payload(cls, value):
+        # Support for old-syntax raw strings in the content
+        if isinstance(value, str):
+            return [TextContent(text=value)]
+        return value
 
     # Name is only supported if we're formatting a function message
     name: str | None = None
@@ -94,6 +167,14 @@ class GPTMessage(BaseModel):
         if self.role != GPTMessageRole.FUNCTION and self.name is not None:
             raise ValueError("Cannot provide a name for non-function messages")
         return self
+
+    def get_content_payloads(self) -> list[TextContent | ImageContent]:
+        if isinstance(self.content, str):
+            return [TextContent(text=self.content)]
+        elif self.content is not None:
+            return self.content
+        else:
+            return []
 
 
 @dataclass

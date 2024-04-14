@@ -1,7 +1,9 @@
 import logging
+import warnings
 from asyncio import TimeoutError as AsyncTimeoutError
 from asyncio import wait_for
 from copy import copy
+from datetime import datetime
 from json import dumps as json_dumps
 from json import loads as json_loads
 from json.decoder import JSONDecodeError
@@ -22,6 +24,7 @@ from openai import AsyncOpenAI
 from openai._exceptions import APIConnectionError
 from openai._exceptions import APITimeoutError as OpenAITimeout
 from openai._exceptions import RateLimitError
+from openai.types.chat import ChatCompletionMessage
 from pydantic import BaseModel, Field, ValidationError
 from tiktoken import encoding_for_model
 
@@ -35,7 +38,10 @@ from gpt_json.models import (
     FixTransforms,
     GPTMessage,
     GPTModelVersion,
+    ImageContent,
+    ModelVersionParams,
     ResponseType,
+    TextContent,
     TruncationOptions,
 )
 from gpt_json.parsers import find_json_response
@@ -46,7 +52,7 @@ from gpt_json.streaming import (
     prepare_streaming_object,
 )
 from gpt_json.transformations import fix_bools, fix_truncated_json
-from gpt_json.truncation import num_tokens_from_messages, truncate_tokens
+from gpt_json.truncation import truncate_tokens
 from gpt_json.types_oai import ChatCompletionChunk
 
 logger = logging.getLogger("gptjson_logger")
@@ -54,6 +60,9 @@ handler = logging.StreamHandler()
 formatter = logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
 handler.setFormatter(formatter)
 logger.addHandler(handler)
+
+# https://github.com/openai/openai-python/issues/1306
+ChatCompletionMessage.model_rebuild()
 
 
 def handle_backoff(details):
@@ -106,6 +115,7 @@ class GPTJSON(Generic[SchemaType]):
         self,
         api_key: str,
         model: GPTModelVersion | str = GPTModelVersion.GPT_4,
+        model_max_tokens: int | None = None,
         auto_trim: bool = False,
         auto_trim_response_overhead: int = 0,
         functions: list[Callable[[Any], Any]] | None = None,
@@ -118,6 +128,9 @@ class GPTJSON(Generic[SchemaType]):
         """
         :param api_key: OpenAI API key, if `OPENAI_API_KEY` environment variable is not set
         :param model: GPTModelVersion or string model name
+        :param model_max_tokens: If a string is provided for the model name, users must specify the maximum tokens
+            that it supports. Allows for more flexibility in adding newer models that aren't yet specified
+            in the core library enum.
         :param auto_trim: If True, automatically trim messages to fit within the model's token limit
         :param auto_trim_response_overhead: If auto_trim is True, will leave at least `auto_trim_response_overhead` space
             for the output payload. For GPT, initial prompt + response <= allowed tokens.
@@ -127,7 +140,7 @@ class GPTJSON(Generic[SchemaType]):
         :param kwargs: Additional arguments to pass to OpenAI's `openai.Completion.create` method
 
         """
-        self.model = model.value if isinstance(model, GPTModelVersion) else model
+        self.model = self.get_model_metadata(model, model_max_tokens)
         self.auto_trim = auto_trim
         self.temperature = temperature
         self.timeout = timeout
@@ -167,21 +180,16 @@ class GPTJSON(Generic[SchemaType]):
                 "GPTJSON needs to be instantiated with a pydantic.BaseModel schema."
             )
 
-        if "gpt-4" in self.model:
-            self.max_tokens = (
-                8192 - auto_trim_response_overhead if self.auto_trim else 8192
-            )
-        elif "gpt-3.5" in self.model:
-            self.max_tokens = (
-                4096 - auto_trim_response_overhead if self.auto_trim else 4096
-            )
-        else:
-            raise ValueError(
-                "Unknown model to infer max tokens, see https://platform.openai.com/docs/models/gpt-4 for more information on token length."
-            )
+        self.max_tokens = (
+            self.model.max_length - auto_trim_response_overhead
+            if self.auto_trim
+            else self.model.max_length
+        )
 
         self.schema_prompt = generate_schema_prompt(self.schema_model)
-        self.client = AsyncOpenAI(api_key=api_key)
+
+        # We use separate retry logic, versus the one that's baked into OpenAPI
+        self.client = AsyncOpenAI(api_key=api_key, max_retries=1)
 
     async def run(
         self,
@@ -223,7 +231,7 @@ class GPTJSON(Generic[SchemaType]):
         )
 
         logger.debug("------- RAW RESPONSE ----------")
-        logger.debug(response["choices"])
+        logger.debug(response.choices)
         logger.debug("------- END RAW RESPONSE ----------")
 
         # If the response requests a function call, prefer this over the main response
@@ -240,9 +248,9 @@ class GPTJSON(Generic[SchemaType]):
         function_call: Callable[[BaseModel], Any] | None = None
         function_parsed: BaseModel | None = None
 
-        if response_message.get("function_call"):
-            function_name = response_message["function_call"]["name"]
-            function_args_string = response_message["function_call"]["arguments"]
+        if response_message.function_call:
+            function_name = response_message.function_call.name
+            function_args_string = response_message.function_call.arguments
             if function_name not in self.functions:
                 raise InvalidFunctionResponse(function_name)
 
@@ -257,11 +265,11 @@ class GPTJSON(Generic[SchemaType]):
             except (ValueError, ValidationError):
                 raise InvalidFunctionParameters(function_name, function_args_string)
 
-        raw_response = GPTMessage.model_validate(response_message)
+        raw_response = GPTMessage.model_validate(response_message.model_dump())
         raw_response.allow_templating = False
 
         extracted_json, fixed_payload = self.extract_json(
-            response_message, self.extract_type
+            raw_response, self.extract_type
         )
 
         # Cast to schema model
@@ -368,12 +376,12 @@ class GPTJSON(Generic[SchemaType]):
                 yield partial_response
                 previous_partial = partial_response
 
-    def extract_json(self, response_message, extract_type: ResponseType):
+    def extract_json(self, response_message: GPTMessage, extract_type: ResponseType):
         """
         Assumes one main block of results, either list of dictionary
         """
 
-        full_response = response_message["content"]
+        full_response = self.get_content_text(response_message.get_content_payloads())
         if not full_response:
             return None, None
 
@@ -400,13 +408,13 @@ class GPTJSON(Generic[SchemaType]):
             return None, fixed_payload
 
     def extract_response_message(self, completion_response):
-        choices = completion_response["choices"]
+        choices = completion_response.choices
 
         if not choices:
             logger.warning("No choices available, should report error...")
             return None
 
-        return choices[0]["message"]
+        return choices[0].message
 
     async def submit_request(
         self,
@@ -437,7 +445,7 @@ class GPTJSON(Generic[SchemaType]):
             optional_parameters["function_call"] = "auto"
 
         execute_prediction = self.client.chat.completions.create(
-            model=self.model,
+            model=self.model.api_name,
             messages=[self.message_to_dict(message) for message in messages],
             temperature=self.temperature,
             stream=stream,
@@ -509,29 +517,31 @@ class GPTJSON(Generic[SchemaType]):
         )
 
         # fill the messages without the target variable to calculate the "space" we have left
+        enc = encoding_for_model("gpt-4")
         format_variables_no_target = format_variables.copy()
         format_variables_no_target[truncation_options.target_variable] = ""
-        target_variable_max_tokens = (
-            truncation_options.max_prompt_tokens
-            - num_tokens_from_messages(
-                [
-                    self.message_to_dict(
-                        self.fill_message_template(message, format_variables_no_target)
+        target_variable_max_tokens = truncation_options.max_prompt_tokens - sum(
+            [
+                len(
+                    enc.encode(
+                        self.get_content_text(new_message.get_content_payloads())
                     )
-                    for message in messages
-                ],
-                self.model,
-            )
+                )
+                for message in messages
+                for new_message in [
+                    self.fill_message_template(message, format_variables_no_target)
+                ]
+            ],
         )
 
-        if target_variable_max_tokens < 0:
+        if target_variable_max_tokens <= 0:
             raise ValueError(
-                f"Truncation options max_prompt_tokens {truncation_options.max_prompt_tokens} is too small to fit the messages."
+                f"Truncation options max_prompt_tokens {truncation_options.max_prompt_tokens} is too small to fit any part of the variable."
             )
 
         truncated_target_variable = truncate_tokens(
             text=format_variables[truncation_options.target_variable],
-            model=self.model,
+            model=self.model.api_name,
             mode=truncation_options.truncation_mode,
             max_tokens=target_variable_max_tokens,
             custom_truncate_next=truncation_options.custom_truncate_next,
@@ -561,29 +571,41 @@ class GPTJSON(Generic[SchemaType]):
         if message.content is None or not message.allow_templating:
             return message
 
-        # Regular quotes should passthrough to the next stage, except for our special keys
-        content = message.content.replace("{", "{{").replace("}", "}}")
-        for key in auto_format.keys():
-            content = content.replace("{{" + key + "}}", "{" + key + "}")
-        content = content.format(**auto_format)
-
-        # We do this formatting in a separate pass so we can fill any template variables that might
-        # have been left in the pydantic field typehints
-        content = content.format(**format_variables)
-
         new_message = copy(message)
-        new_message.content = content
+        new_message.content = []
+
+        # Regular quotes should passthrough to the next stage, except for our special keys
+        for payload in message.get_content_payloads():
+            if not isinstance(payload, TextContent):
+                new_message.content.append(payload)
+                continue
+
+            content = payload.text.replace("{", "{{").replace("}", "}}")
+            for key in auto_format.keys():
+                content = content.replace("{{" + key + "}}", "{" + key + "}")
+
+            content = content.format(**auto_format)
+
+            # We do this formatting in a separate pass so we can fill any template variables that might
+            # have been left in the pydantic field typehints
+            content = content.format(**format_variables)
+
+            new_payload = copy(payload)
+            new_payload.text = content
+            new_message.content.append(new_payload)
+
         return new_message
 
     def message_to_dict(self, message: GPTMessage):
-        obj = json_loads(message.model_dump_json(exclude_unset=True))
+        obj = json_loads(message.model_dump_json(by_alias=True, exclude_none=True))
         obj.pop("allow_templating", None)
         return obj
 
-    def trim_messages(self, messages: list[GPTMessage], n: int):
+    def trim_messages(self, messages: list[GPTMessage], n: int) -> list[GPTMessage]:
         """
         Returns a list of messages with a total token count less than n tokens,
-        cropping the last message if needed.
+        cropping the last message if needed. Note - right now images are excluded
+        from the token count.
 
         Args:
             messages (list): List of strings to be checked.
@@ -592,17 +614,20 @@ class GPTJSON(Generic[SchemaType]):
         Returns:
             list: A list of messages with a total token count less than n tokens.
         """
-        message_text = [message.content for message in messages if message.content]
+        message_text = [message.get_content_payloads() for message in messages]
 
         enc = encoding_for_model("gpt-4")
-        filtered_messages = []
+        filtered_messages: list[list[TextContent | ImageContent]] = []
         current_token_count = 0
         original_token_count = sum(
-            [len(enc.encode(message)) for message in message_text]
+            [
+                len(enc.encode(self.get_content_text(message)))
+                for message in message_text
+            ]
         )
 
         for message in message_text:
-            tokens = enc.encode(message)
+            tokens = enc.encode(self.get_content_text(message))
             message_token_count = len(tokens)
 
             if current_token_count + message_token_count < n:
@@ -612,12 +637,17 @@ class GPTJSON(Generic[SchemaType]):
                 remaining_tokens = n - current_token_count
                 if remaining_tokens > 0:
                     cropped_message = enc.decode(tokens[:remaining_tokens])
-                    filtered_messages.append(cropped_message)
+                    filtered_messages.append(
+                        [
+                            # Note that this will drop any images in the current message
+                            TextContent(text=cropped_message)
+                        ]
+                    )
                 current_token_count += remaining_tokens
                 break
 
         # Recreate the messages with our new text
-        new_messages = []
+        new_messages: list[GPTMessage] = []
         for i, content in enumerate(filtered_messages):
             new_message = copy(messages[i])
             new_message.content = content
@@ -634,6 +664,59 @@ class GPTJSON(Generic[SchemaType]):
             )
 
         return new_messages
+
+    def get_content_text(self, content: list[TextContent | ImageContent]):
+        return " ".join(
+            [payload.text for payload in content if isinstance(payload, TextContent)]
+        )
+
+    def get_model_metadata(
+        self,
+        model: GPTModelVersion | str,
+        model_max_tokens: int | None,
+    ):
+        if isinstance(model, GPTModelVersion):
+            # User should not specify the model_max_tokens if they are passing a GPTModelVersion, since
+            # their value will be overridden by our default config
+            if model_max_tokens is not None:
+                raise ValueError(
+                    "model_max_tokens should not be specified when passing a GPTModelVersion object."
+                )
+
+            # Determine if the deprecation date is specified, should re-raise a deprecation warning
+            if model.value.deprecated_date is not None:
+                deprecation_date = model.value.deprecated_date
+                if deprecation_date < datetime.now().date():
+                    raise ValueError(
+                        f"Model {model.value.api_name} is deprecated as of {deprecation_date}."
+                    )
+                warnings.warn(
+                    f"Model {model.value.api_name} is deprecated as of {deprecation_date}.",
+                    DeprecationWarning,
+                    stacklevel=2,
+                )
+
+            # Specific deprecation warning related to our implementation. We want to encourage users
+            # to use a absolute model version instead of a continuously updating one.
+            if model in {GPTModelVersion.GPT_4, GPTModelVersion.GPT_3_5}:
+                warnings.warn(
+                    f"gpt-json will not support continuous model updates going forward.\n"
+                    "Switch to an absolute model revision like `GPTModelVersion.GPT_4_0613`.",
+                    DeprecationWarning,
+                    stacklevel=2,
+                )
+
+            return model.value
+
+        if not model_max_tokens:
+            raise ValueError(
+                "You must specify a `model_max_tokens` if you are using a custom model"
+            )
+
+        return ModelVersionParams(
+            api_name=model,
+            max_length=model_max_tokens,
+        )
 
     def __class_getitem__(cls, item):
         cls._cls_schema_model = item

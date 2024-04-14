@@ -8,17 +8,11 @@ from gpt_json.models import (
     GPTMessage,
     GPTMessageRole,
     GPTModelVersion,
+    TextContent,
     TruncationOptions,
     VariableTruncationMode,
 )
-from gpt_json.truncation import num_tokens_from_messages, truncate_tokens
-
-
-@pytest.mark.parametrize("model", [model.value for model in GPTModelVersion])
-def test_num_tokens_implemented(model):
-    # no need to assert anything specific, just that its implemented for all models
-    # i.e. doesn't throw an error
-    num_tokens_from_messages([], model)
+from gpt_json.truncation import truncate_tokens
 
 
 def test_fill_messages_truncated():
@@ -28,10 +22,12 @@ def test_fill_messages_truncated():
     gpt = GPTJSON[TestSchema](api_key="TEST")
     assert gpt.fill_messages(
         [
-            GPTMessage(role=GPTMessageRole.SYSTEM, content="system"),
+            GPTMessage(
+                role=GPTMessageRole.SYSTEM, content=[TextContent(text="system")]
+            ),
             GPTMessage(
                 role=GPTMessageRole.USER,
-                content="some long text: {long_text}",
+                content=[TextContent(text="some long text: {long_text}")],
             ),
         ],
         dict(
@@ -39,13 +35,16 @@ def test_fill_messages_truncated():
         ),
         truncation_options=TruncationOptions(
             target_variable="long_text",
-            max_prompt_tokens=20,
+            max_prompt_tokens=8,
             truncation_mode=VariableTruncationMode.BEGINNING,
         ),
         max_response_tokens=None,
     ) == [
-        GPTMessage(role=GPTMessageRole.SYSTEM, content="system"),
-        GPTMessage(role=GPTMessageRole.USER, content="some long text: hello world"),
+        GPTMessage(role=GPTMessageRole.SYSTEM, content=[TextContent(text="system")]),
+        GPTMessage(
+            role=GPTMessageRole.USER,
+            content=[TextContent(text="some long text: hello world")],
+        ),
     ]
 
 
@@ -59,10 +58,12 @@ def test_fill_messages_truncated_failure_case():
     with pytest.raises(ValueError, match=".* max_prompt_tokens .* too small .*"):
         gpt.fill_messages(
             [
-                GPTMessage(role=GPTMessageRole.SYSTEM, content="system"),
+                GPTMessage(
+                    role=GPTMessageRole.SYSTEM, content=[TextContent(text="system")]
+                ),
                 GPTMessage(
                     role=GPTMessageRole.USER,
-                    content="{long_text}",
+                    content=[TextContent(text="{long_text}")],
                 ),
             ],
             dict(
@@ -70,7 +71,7 @@ def test_fill_messages_truncated_failure_case():
             ),
             truncation_options=TruncationOptions(
                 target_variable="long_text",
-                max_prompt_tokens=2,
+                max_prompt_tokens=1,
                 truncation_mode=VariableTruncationMode.BEGINNING,
             ),
             max_response_tokens=None,
@@ -81,7 +82,7 @@ def test_token_truncation_end_mode():
     assert (
         truncate_tokens(
             "hello world goodbye world world",
-            GPTModelVersion.GPT_3_5.value,
+            GPTModelVersion.GPT_3_5.value.api_name,
             VariableTruncationMode.BEGINNING,
             2,
         )
@@ -93,7 +94,7 @@ def test_token_truncation_beginning_mode():
     assert (
         truncate_tokens(
             "hello world world goodbye world",
-            GPTModelVersion.GPT_3_5.value,
+            GPTModelVersion.GPT_3_5.value.api_name,
             VariableTruncationMode.TRAILING,
             2,
         )
@@ -105,7 +106,7 @@ def test_token_truncation_middle_mode():
     assert (
         truncate_tokens(
             "hello world goodbye world world",
-            GPTModelVersion.GPT_3_5.value,
+            GPTModelVersion.GPT_3_5.value.api_name,
             VariableTruncationMode.MIDDLE,
             1,
         )
@@ -115,7 +116,7 @@ def test_token_truncation_middle_mode():
     assert (
         truncate_tokens(
             "hello world goodbye world world",
-            GPTModelVersion.GPT_3_5.value,
+            GPTModelVersion.GPT_3_5.value.api_name,
             VariableTruncationMode.MIDDLE,
             2,
         )
@@ -125,7 +126,7 @@ def test_token_truncation_middle_mode():
     assert (
         truncate_tokens(
             "hello world goodbye world world",
-            GPTModelVersion.GPT_3_5.value,
+            GPTModelVersion.GPT_3_5.value.api_name,
             VariableTruncationMode.MIDDLE,
             3,
         )
@@ -138,7 +139,7 @@ def test_token_truncation_random_mode():
     assert (
         truncate_tokens(
             "hello world goodbye world",
-            GPTModelVersion.GPT_3_5.value,
+            GPTModelVersion.GPT_3_5.value.api_name,
             VariableTruncationMode.RANDOM,
             2,
         )
@@ -153,7 +154,7 @@ def test_token_truncation_custom_mode():
     assert (
         truncate_tokens(
             "hello | world | goodbye | world | world",
-            GPTModelVersion.GPT_3_5.value,
+            GPTModelVersion.GPT_3_5.value.api_name,
             VariableTruncationMode.CUSTOM,
             3,
             _custom_truncate,
