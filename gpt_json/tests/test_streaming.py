@@ -81,7 +81,7 @@ async def test_gpt_stream(
     expected_stream_data,
     should_support,
 ):
-    model_version = GPTModelVersion.GPT_3_5
+    model_version = GPTModelVersion.GPT_4
     messages = [
         GPTMessage(
             role=GPTMessageRole.USER,

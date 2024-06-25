@@ -164,7 +164,7 @@ async def test_create(
     parsed: BaseModel,
     expected_transformations: FixTransforms,
 ):
-    model_version = GPTModelVersion.GPT_3_5
+    model_version = GPTModelVersion.GPT_4
     messages = [
         GPTMessage(
             role=GPTMessageRole.USER,
@@ -209,7 +209,7 @@ async def test_create(
 async def test_create_with_function_calls(
     httpx_mock: HTTPXMock,
 ):
-    model_version = GPTModelVersion.GPT_3_5
+    model_version = GPTModelVersion.GPT_4
     messages = [
         GPTMessage(
             role=GPTMessageRole.USER,
