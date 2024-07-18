@@ -64,6 +64,9 @@ class GPTModelVersion(Enum):
     GPT_4_VISION_PREVIEW_1106 = ModelVersionParams(
         api_name="gpt-4-1106-vision-preview", max_length=128_000
     )
+    
+    GPT_4_O = ModelVersionParams(api_name="gpt-4o", max_length=128_000)
+    GPT_4_O_MINI = ModelVersionParams(api_name="gpt-4o-mini", max_length=128_000)
 
     # Deprecated internally - switch to explicit model revisions
     # Kept for reverse compatibility
